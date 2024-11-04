@@ -16,7 +16,6 @@ struct state_t {
   uint16_t sp;
   uint8_t delay_timer;
   uint8_t sound_timer;
-  function_t next_step;
 };
 
 state_t fetch_instruction(state_t state);
@@ -26,7 +25,6 @@ state_t jump_to_address(state_t state) {
   uint16_t tpc = state.pc;
   state.pc = address;
 
-  state.next_step = (function_t)fetch_instruction;
   printf("jump_to_address 0x%03X -> 0x%03X\n", tpc, address);
   return state;
 }
@@ -38,16 +36,15 @@ state_t return_from_subroutine(state_t state) {
     printf("return_from_subroutine 0x%03X -> 0x%03X\n", tpc, state.pc);
   } else {
     printf("stack underflow on return\n");
-    state.next_step = NULL;
+    exit(1);
   }
-  state.next_step = fetch_instruction;
   return state;
 }
 
 state_t call_subroutine(state_t state) {
   if (state.sp >= 16) {
     printf("stack overflow at 0x%03X\n", state.pc);
-    state.next_step = NULL;
+    exit(1);
   } else {
     state.stack[state.sp] = state.pc;
     state.sp++;
@@ -56,7 +53,6 @@ state_t call_subroutine(state_t state) {
     uint16_t tpc = state.pc;
     state.pc = address;
     printf("call_subroutine 0x%03X -> 0x%03X\n", tpc, address);
-    state.next_step = fetch_instruction;
   }
   return state;
 }
@@ -69,7 +65,6 @@ state_t set_vx_nn(state_t state) {
   uint8_t nn = state.memory[state.pc - 1];
   state.V[x] = nn;
   printf("set V[%X] to 0x%02X\n", x, nn);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -78,7 +73,6 @@ state_t set_vx_vy(state_t state) {
   uint8_t y = VY;
   state.V[x] = state.V[y];
   printf("set V[%X] to V[%X]\n", x, y);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -87,7 +81,6 @@ state_t vx_or_vy(state_t state) {
   uint8_t y = VY;
   state.V[x] |= state.V[y];
   printf("V[%X] |= V[%X] : 0x%02X\n", x, y, state.V[x]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -96,7 +89,6 @@ state_t vx_and_vy(state_t state) {
   uint8_t y = VY;
   state.V[x] &= state.V[y];
   printf("V[%X] &= V[%X] : 0x%02X\n", x, y, state.V[x]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -105,7 +97,6 @@ state_t vx_xor_vy(state_t state) {
   uint8_t y = VY;
   state.V[x] ^= state.V[y];
   printf("V[%X] ^= V[%X] : 0x%02X\n", x, y, state.V[x]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -117,7 +108,6 @@ state_t vx_add_vy(state_t state) {
   // lower 8 bits in VX
   state.V[x] = result & 0xFF;
   printf("V[%X] += V[%X] : 0x%02X, VF: %d\n", x, y, state.V[x], state.V[0xF]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -127,7 +117,6 @@ state_t vx_sub_vy(state_t state) {
   state.V[0xF] = (state.V[x] >= state.V[y]) ? 1 : 0;
   state.V[x] = state.V[x] - state.V[y];
   printf("V[%X] -= V[%X] : 0x%02X, VF: %d\n", x, y, state.V[x], state.V[0xF]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -141,7 +130,6 @@ state_t vx_shift_right(state_t state) {
   state.V[x] >>= 1;
   printf("V[%X] >>= 1 : 0x%02X, VF (old LSB): %d\n", x, state.V[x],
          state.V[0xF]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -156,7 +144,6 @@ state_t vx_set_vy_minus_vx(state_t state) {
   state.V[x] = state.V[y] - state.V[x];
   printf("V[%X] = V[%X] - V[%X] : 0x%02X, VF: %d\n", x, y, x, state.V[x],
          state.V[0xF]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -170,7 +157,6 @@ state_t vx_shift_left(state_t state) {
   state.V[x] <<= 1;
   printf("V[%X] <<= 1 : 0x%02X, VF (old MSB): %d\n", x, state.V[x],
          state.V[0xF]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -179,12 +165,11 @@ state_t add_nn_to_vx(state_t state) {
   uint8_t nn = state.memory[state.pc - 1];
   state.V[x] += nn;
   printf("add 0x%02X to V[%X], result: 0x%02X\n", nn, x, state.V[x]);
-  state.next_step = fetch_instruction;
   return state;
 }
 
 state_t unknown_instruction(state_t state) {
-  state.next_step = NULL;
+  exit(1);
   return state;
 }
 
@@ -193,7 +178,6 @@ state_t set_index_register(state_t state) {
       (state.memory[state.pc - 2] & 0x0F) << 8 | state.memory[state.pc - 1];
   state.I = address;
   printf("Set I to 0x%03X\n", address);
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -208,7 +192,6 @@ state_t skip_if_vx_not_nn(state_t state) {
     printf("skip_if_vx_not_nn V[%X] (0x%02X) == 0x%02X, not skipping\n", x,
            state.V[x], nn);
   }
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -224,7 +207,6 @@ state_t skip_if_vx_eq_nn(state_t state) {
     printf("skip_if_vx_eq_nn V[%X] (0x%02X) != 0x%02X, not skipping\n", x,
            state.V[x], nn);
   }
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -240,7 +222,6 @@ state_t skip_if_vx_eq_vy(state_t state) {
     printf("skip_if_vx_eq_vy V[%X] (0x%02X) != V[%X] (0x%02X), not skipping\n",
            x, state.V[x], y, state.V[y]);
   }
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -256,7 +237,6 @@ state_t skip_if_vx_ne_vy(state_t state) {
     printf("skip_if_vx_ne_vy V[%X] (0x%02X) == V[%X] (0x%02X), not skipping\n",
            x, state.V[x], y, state.V[y]);
   }
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -269,7 +249,6 @@ state_t vx_rand_and_nn(state_t state) {
   printf("V[%X] = rand (0x%02X) AND 0x%02X : 0x%02X\n", x, random_value, nn,
          state.V[x]);
 
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -279,7 +258,6 @@ state_t jump_nnn_plus_v0(state_t state) {
   uint16_t new_pc = nnn + state.V[0]; // NNN + V0
   printf("jump to 0x%03X + V[0] (0x%02X) : 0x%03X\n", nnn, state.V[0], new_pc);
   state.pc = new_pc;
-  state.next_step = fetch_instruction;
   return state;
 }
 
@@ -300,45 +278,42 @@ static function_t instruction_8xy_map[] = {
 
 state_t sub_dispatch(state_t state, function_t sub_map[], uint8_t sub_opcode) {
   if (sub_map[sub_opcode]) {
-    state.next_step = sub_map[sub_opcode];
+    state = sub_map[sub_opcode](state);
   } else {
-    state.next_step = unknown_instruction;
-  }
-  return state;
-}
-
-state_t fetch_instruction(state_t state) {
-  uint16_t instruction =
-      (state.memory[state.pc] << 8) | state.memory[state.pc + 1];
-  state.pc += 2;
-
-  uint8_t opcode = (instruction & 0xF000) >> 12;
-
-  if (opcode == 0x0) {
-    uint8_t sub_opcode = instruction & 0x000F;
-    if (sub_opcode == 0xE) {
-      state.next_step = return_from_subroutine;
-    }
-  } else if (opcode == 0x8) {
-    uint8_t sub_opcode = instruction & 0x000F;
-    /*printf("-> its a sub dispatch at 0x%03X: 0x%04X\n", state.pc - 2,
-           instruction);*/
-    state = sub_dispatch(state, instruction_8xy_map, sub_opcode);
-  } else if (instruction_map[opcode]) {
-    /*printf("-> fetching instruction at 0x%03X: 0x%04X\n", state.pc - 2,
-           instruction);*/
-    state.next_step = instruction_map[opcode];
-  } else {
-    /*printf("unknown/null instruction at 0x%03X -> 0x%03X\n", instruction,
-           state.pc - 2);*/
-    state.next_step = unknown_instruction;
+    state = unknown_instruction(state);
   }
   return state;
 }
 
 void run_vm(state_t state) {
-  while (state.next_step != NULL) {
-    state = state.next_step(state);
+  while (state.pc < 4096) {
+    uint16_t instruction =
+        (state.memory[state.pc] << 8) | state.memory[state.pc + 1];
+    state.pc += 2;
+
+    uint8_t opcode = (instruction & 0xF000) >> 12;
+
+    if (opcode == 0x0) {
+      uint8_t sub_opcode = instruction & 0x000F;
+      if (sub_opcode == 0xE) {
+        state = return_from_subroutine(state);
+      } else {
+        state = unknown_instruction(state);
+      }
+    } else if (opcode == 0x8) {
+      uint8_t sub_opcode = instruction & 0x000F;
+      state = sub_dispatch(state, instruction_8xy_map, sub_opcode);
+    } else if (instruction_map[opcode]) {
+      state = instruction_map[opcode](state);
+    } else {
+      state = unknown_instruction(state);
+    }
+
+    if (state.pc >= 4096) {
+      printf("terminating due to program counter out of bounds or unknown "
+             "state\n");
+      break;
+    }
   }
 }
 
@@ -347,7 +322,6 @@ int main() {
 
   state_t s = {0};
   s.pc = 0x200;
-  s.next_step = fetch_instruction;
 
   uint8_t program[] = {
       0x60, 0x01, // 6001: set v0 to 0x01
