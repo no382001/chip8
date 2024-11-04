@@ -3,6 +3,85 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <pthread.h>
+#include <string.h>
+#include <tcl.h>
+#include <tk.h>
+
+pthread_mutex_t key_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t key_cond = PTHREAD_COND_INITIALIZER;
+
+volatile uint8_t key_pressed = 0xFF;
+
+int hex_key_to_value(const char *key) {
+  if (!strcmp(key, "1"))
+    return 0x1;
+  if (!strcmp(key, "2"))
+    return 0x2;
+  if (!strcmp(key, "3"))
+    return 0x3;
+  if (!strcmp(key, "C"))
+    return 0xC;
+  if (!strcmp(key, "4"))
+    return 0x4;
+  if (!strcmp(key, "5"))
+    return 0x5;
+  if (!strcmp(key, "6"))
+    return 0x6;
+  if (!strcmp(key, "D"))
+    return 0xD;
+  if (!strcmp(key, "7"))
+    return 0x7;
+  if (!strcmp(key, "8"))
+    return 0x8;
+  if (!strcmp(key, "9"))
+    return 0x9;
+  if (!strcmp(key, "E"))
+    return 0xE;
+  if (!strcmp(key, "A"))
+    return 0xA;
+  if (!strcmp(key, "0"))
+    return 0x0;
+  if (!strcmp(key, "B"))
+    return 0xB;
+  if (!strcmp(key, "F"))
+    return 0xF;
+  return 0xFF;
+}
+
+int keypress_cb(ClientData clientData, Tcl_Interp *interp, int argc,
+                const char *argv[]) {
+  if (argc < 2)
+    return TCL_ERROR;
+
+  uint8_t key = hex_key_to_value(argv[1]);
+
+  pthread_mutex_lock(&key_mutex);
+  key_pressed = key;
+  pthread_cond_signal(&key_cond);
+  pthread_mutex_unlock(&key_mutex);
+
+  return TCL_OK;
+}
+
+void refresh_display(Tcl_Interp *interp, uint8_t display[64 * 32]) {
+  Tcl_Eval(interp, ".main.display delete all");
+  for (int i = 0; i < 64 * 32; i++) {
+    int x = i % 64;
+    int y = i / 64;
+    if (display[i]) {
+      char cmd[256];
+      snprintf(cmd, sizeof(cmd),
+               ".main.display create rectangle %d %d %d %d -fill white "
+               "-outline white",
+               x * 10, y * 10, (x + 1) * 10, (y + 1) * 10);
+      Tcl_Eval(interp, cmd);
+    }
+  }
+}
+
+//#define printf(x, ...)
+
 typedef struct state_t state_t;
 typedef state_t (*function_t)(state_t);
 
@@ -261,6 +340,19 @@ state_t jump_nnn_plus_v0(state_t state) {
   return state;
 }
 
+void wait_for_kp_s_vx(state_t *state, int vx_index) {
+  pthread_mutex_lock(&key_mutex);
+
+  while (key_pressed == 0xFF) {
+    pthread_cond_wait(&key_cond, &key_mutex);
+  }
+
+  state->V[vx_index] = key_pressed;
+
+  key_pressed = 0xFF;
+  pthread_mutex_unlock(&key_mutex);
+}
+
 static function_t instruction_map[] = {
     [0x1] = jump_to_address,        [0x2] = call_subroutine,
     [0xE] = return_from_subroutine, [0x6] = set_vx_nn,
@@ -293,16 +385,22 @@ void run_vm(state_t state) {
 
     uint8_t opcode = (instruction & 0xF000) >> 12;
 
+    uint8_t sub_opcode = instruction & 0x000F;
+    uint8_t x = (instruction & 0x0F00) >> 8;
     if (opcode == 0x0) {
-      uint8_t sub_opcode = instruction & 0x000F;
       if (sub_opcode == 0xE) {
         state = return_from_subroutine(state);
       } else {
         state = unknown_instruction(state);
       }
     } else if (opcode == 0x8) {
-      uint8_t sub_opcode = instruction & 0x000F;
       state = sub_dispatch(state, instruction_8xy_map, sub_opcode);
+    } else if (opcode == 0xF) {
+      if (sub_opcode == 0x0A) {
+        wait_for_kp_s_vx(&state, x);
+      } else {
+        state = unknown_instruction(state);
+      }
     } else if (instruction_map[opcode]) {
       state = instruction_map[opcode](state);
     } else {
@@ -317,38 +415,46 @@ void run_vm(state_t state) {
   }
 }
 
+void *tk_thread_main(void *arg) {
+  Tcl_Interp *interp = Tcl_CreateInterp();
+  if (Tcl_Init(interp) == TCL_ERROR || Tk_Init(interp) == TCL_ERROR) {
+    fprintf(stderr, "tcl/tk init failed: %s\n", Tcl_GetStringResult(interp));
+    return NULL;
+  }
+
+  Tcl_CreateCommand(interp, "keypress_cb", keypress_cb, NULL, NULL);
+
+  if (Tcl_EvalFile(interp, "gui.tcl") != TCL_OK) {
+    fprintf(stderr, "rrror loading tcl/tk: %s\n", Tcl_GetStringResult(interp));
+    return NULL;
+  }
+
+  Tk_MainLoop();
+  Tcl_DeleteInterp(interp);
+  return NULL;
+}
+
 int main() {
   srand((unsigned int)time(NULL));
+  pthread_t tk_thread;
+
+  if (pthread_create(&tk_thread, NULL, tk_thread_main, NULL)) {
+    fprintf(stderr, "error creating tk thread\n");
+    return 1;
+  }
 
   state_t s = {0};
   s.pc = 0x200;
 
   uint8_t program[] = {
-      0x60, 0x01, // 6001: set v0 to 0x01
-      0x61, 0x02, // 6102: set v1 to 0x02
-      0x62, 0x03, // 6203: set v2 to 0x03
-      0x63, 0x05, // 6305: set v3 to 0x05
-      0xa3, 0x00, // a300: set i to 0x300
-      0xc3, 0x0f, // c30f: v3 = rand and 0x0f
-      0x73, 0x02, // 7302: add 0x02 to v3
-      0x83, 0x14, // 8314: v3 += v1 (with carry)
-      0x83, 0x15, // 8315: v3 -= v1 (with borrow)
-      0x83, 0x16, // 8316: v3 >>= 1, vf = old lsb
-      0x83, 0x17, // 8317: v3 = v1 - v3, vf = 0 on borrow
-      0x83, 0x1e, // 831e: v3 <<= 1, vf = old msb
-      0x43, 0x04, // 4304: skip next instruction if v3 == 0x04
-      0x12, 0x1c, // 121c: jump to address 0x21c (skip subroutine call)
-      0x22, 0x20, // 2220: call subroutine at 0x220
-      0x12, 0x00, // 1200: jump to 0x200 (infinite loop)
-
-      // subroutine at 0x220
-      0x62, 0x04, // 6204: set v2 to 0x04
-      0x52, 0x03, // 5203: skip next instruction if v2 == v3
-      0x00, 0xee, // 00ee: return from subroutine
-
-      // address 0x21c (skip point)
-      0x70, 0x01, // 7001: increment v0 by 1
-      0x12, 0x00  // 1200: jump to 0x200 (back to start of the main loop)
+      0xF0,
+      0x0A, // F00A: wait for a key press, store in V0
+      0x30,
+      0x01, // 3001: skip next instruction if V0 == 0x01
+      0x12,
+      0x00, // 1200: jump to 0x200 (loop back to the beginning if V0 != 0x01)
+      0x00,
+      0xE0 // 00E0: clear the screen (exit condition when V0 == 0x01)
   };
 
   for (int i = 0; i < sizeof(program); i++) {

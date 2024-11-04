@@ -3,7 +3,6 @@ DXYN        | sprite vx vy N    | draw sprite at VX, VY, height N, VF = 1 on col
 EX9E        | if vx - key then  | skip next instruction if key in VX is pressed
 EXA1        | if vx !- key then | skip next instruction if key in VX is not pressed
 FX07        | vx = delay        | set VX to delay timer value
-FX0A        | vx = key          | wait for a key press, store in VX
 FX15        | delay = vx        | set delay timer to VX
 FX18        | buzzer = vx       | set sound timer to VX
 FX1E        | I += vx           | add VX to I
