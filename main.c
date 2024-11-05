@@ -1,12 +1,40 @@
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
-
-#include <pthread.h>
 #include <string.h>
 #include <tcl.h>
+#include <time.h>
 #include <tk.h>
+
+typedef struct state_t state_t;
+typedef state_t (*function_t)(state_t);
+
+typedef struct {
+  uint16_t instruction, nnn;
+  uint8_t opcode, sub_opcode, n, nn, vx, vy;
+} curr_op_t;
+
+struct state_t {
+  uint8_t memory[4096];
+  uint8_t V[16]; // (V0 to VF)
+  uint16_t I;
+  uint16_t pc;
+  uint8_t display[64 * 32];
+  uint16_t stack[16];
+  uint16_t sp;
+  curr_op_t cop;
+  uint8_t delay_timer;
+  uint8_t sound_timer;
+};
+
+#define instruction state.cop.instruction
+#define opcode state.cop.opcode
+#define sub_opcode state.cop.sub_opcode
+#define vx state.cop.vx
+#define vy state.cop.vy
+#define nn state.cop.nn
+#define nnn state.cop.nnn
 
 pthread_mutex_t key_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t key_cond = PTHREAD_COND_INITIALIZER;
@@ -82,45 +110,18 @@ void refresh_display(Tcl_Interp *interp, uint8_t display[64 * 32]) {
 
 //#define printf(x, ...)
 
-typedef struct state_t state_t;
-typedef state_t (*function_t)(state_t);
-
-typedef struct {
-  uint16_t instruction, nnn;
-  uint8_t opcode, sub_opcode, n, nn, vx, vy;
-} curr_op_t;
-
-struct state_t {
-  uint8_t memory[4096];
-  uint8_t V[16]; // (V0 to VF)
-  uint16_t I;
-  uint16_t pc;
-  uint8_t display[64 * 32];
-  uint16_t stack[16];
-  uint16_t sp;
-  curr_op_t cop;
-  uint8_t delay_timer;
-  uint8_t sound_timer;
-};
-
-state_t fetch_instruction(state_t state);
 state_t jump_to_address(state_t state) {
-  uint16_t address =
-      (state.memory[state.pc - 2] & 0x0F) << 8 | state.memory[state.pc - 1];
-  uint16_t tpc = state.pc;
-  state.pc = address;
-
-  printf("jump_to_address 0x%03X -> 0x%03X\n", tpc, address);
+  printf("jump_to_address 0x%03X -> 0x%03X\n", state.pc, nnn);
+  state.pc = nnn;
   return state;
 }
 
 state_t return_from_subroutine(state_t state) {
   if (state.sp > 0) {
-    uint16_t tpc = state.pc;
     state.pc = state.stack[--state.sp];
-    printf("return_from_subroutine 0x%03X -> 0x%03X\n", tpc, state.pc);
+    printf("return_from_subroutine 0x%03X\n", state.pc);
   } else {
-    printf("stack underflow on return\n");
+    printf("stack underflow on return, exiting...\n");
     exit(1);
   }
   return state;
@@ -128,16 +129,13 @@ state_t return_from_subroutine(state_t state) {
 
 state_t call_subroutine(state_t state) {
   if (state.sp >= 16) {
-    printf("stack overflow at 0x%03X\n", state.pc);
+    printf("stack overflow at 0x%03X, exiting...\n", state.pc);
     exit(1);
   } else {
+    printf("call_subroutine 0x%03X -> 0x%03X\n", state.pc, nnn);
     state.stack[state.sp] = state.pc;
     state.sp++;
-    uint16_t address =
-        (state.memory[state.pc - 2] & 0x0F) << 8 | state.memory[state.pc - 1];
-    uint16_t tpc = state.pc;
-    state.pc = address;
-    printf("call_subroutine 0x%03X -> 0x%03X\n", tpc, address);
+    state.pc = nnn;
   }
   return state;
 }
@@ -146,206 +144,162 @@ state_t call_subroutine(state_t state) {
 #define VY ((state.memory[state.pc - 1] & 0xF0) >> 4)
 
 state_t set_vx_nn(state_t state) {
-  uint8_t x = (state.memory[state.pc - 2] & 0x0F);
-  uint8_t nn = state.memory[state.pc - 1];
-  state.V[x] = nn;
-  printf("set V[%X] to 0x%02X\n", x, nn);
+  printf("set V[%X] to 0x%02X\n", vx, nn);
+  state.V[vx] = nn;
   return state;
 }
 
 state_t set_vx_vy(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-  state.V[x] = state.V[y];
-  printf("set V[%X] to V[%X]\n", x, y);
+  printf("set V[%X] to V[%X]\n", vx, vy);
+  state.V[vx] = state.V[vy];
   return state;
 }
 
 state_t vx_or_vy(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-  state.V[x] |= state.V[y];
-  printf("V[%X] |= V[%X] : 0x%02X\n", x, y, state.V[x]);
+  state.V[vx] |= state.V[vy];
+  printf("V[%X] |= V[%X] : 0x%02X\n", vx, vy, state.V[vx]);
   return state;
 }
 
 state_t vx_and_vy(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-  state.V[x] &= state.V[y];
-  printf("V[%X] &= V[%X] : 0x%02X\n", x, y, state.V[x]);
+  state.V[vx] &= state.V[vy];
+  printf("V[%X] &= V[%X] : 0x%02X\n", vx, vy, state.V[vx]);
   return state;
 }
 
 state_t vx_xor_vy(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-  state.V[x] ^= state.V[y];
-  printf("V[%X] ^= V[%X] : 0x%02X\n", x, y, state.V[x]);
+  state.V[vx] ^= state.V[vy];
+  printf("V[%X] ^= V[%X] : 0x%02X\n", vx, vy, state.V[vx]);
   return state;
 }
 
 state_t vx_add_vy(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-  uint16_t result = state.V[x] + state.V[y];
+  uint16_t result = state.V[vx] + state.V[vy];
   state.V[0xF] = (result > 0xFF) ? 1 : 0;
-  // lower 8 bits in VX
-  state.V[x] = result & 0xFF;
-  printf("V[%X] += V[%X] : 0x%02X, VF: %d\n", x, y, state.V[x], state.V[0xF]);
+  state.V[vx] = result & 0xFF; // lower 8 bits in VX
+  printf("V[%X] += V[%X] : 0x%02X, VF: %d\n", vx, vy, state.V[vx],
+         state.V[0xF]);
   return state;
 }
 
 state_t vx_sub_vy(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-  state.V[0xF] = (state.V[x] >= state.V[y]) ? 1 : 0;
-  state.V[x] = state.V[x] - state.V[y];
-  printf("V[%X] -= V[%X] : 0x%02X, VF: %d\n", x, y, state.V[x], state.V[0xF]);
+  state.V[0xF] = (state.V[vx] >= state.V[vy]) ? 1 : 0;
+  state.V[vx] = state.V[vx] - state.V[vy];
+  printf("V[%X] -= V[%X] : 0x%02X, VF: %d\n", vx, vy, state.V[vx],
+         state.V[0xF]);
   return state;
 }
 
 state_t vx_shift_right(state_t state) {
-  uint8_t x = VX;
-
   // set VF to the least significant bit of VX before shifting
-  state.V[0xF] = state.V[x] & 0x01;
+  state.V[0xF] = state.V[vx] & 0x01;
 
-  // shift VX right by 1
-  state.V[x] >>= 1;
-  printf("V[%X] >>= 1 : 0x%02X, VF (old LSB): %d\n", x, state.V[x],
+  state.V[vx] >>= 1;
+  printf("V[%X] >>= 1 : 0x%02X, VF (old LSB): %d\n", vx, state.V[vx],
          state.V[0xF]);
   return state;
 }
 
 state_t vx_set_vy_minus_vx(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-
   // set VF to 1 if VY >= VX (no borrow), 0 otherwise
-  state.V[0xF] = (state.V[y] >= state.V[x]) ? 1 : 0;
-
-  // Set VX to VY - VX
-  state.V[x] = state.V[y] - state.V[x];
-  printf("V[%X] = V[%X] - V[%X] : 0x%02X, VF: %d\n", x, y, x, state.V[x],
+  state.V[0xF] = (state.V[vy] >= state.V[vx]) ? 1 : 0;
+  state.V[vx] = state.V[vy] - state.V[vx];
+  printf("V[%X] = V[%X] - V[%X] : 0x%02X, VF: %d\n", vx, vy, vx, state.V[vx],
          state.V[0xF]);
   return state;
 }
 
 state_t vx_shift_left(state_t state) {
-  uint8_t x = (state.memory[state.pc - 2] & 0x0F);
-
   // set VF to the most significant bit of VX before shifting
-  state.V[0xF] = (state.V[x] & 0x80) >> 7;
-
-  // shift VX left by 1
-  state.V[x] <<= 1;
-  printf("V[%X] <<= 1 : 0x%02X, VF (old MSB): %d\n", x, state.V[x],
+  state.V[0xF] = (state.V[vx] & 0x80) >> 7;
+  state.V[vx] <<= 1;
+  printf("V[%X] <<= 1 : 0x%02X, VF (old MSB): %d\n", vx, state.V[vx],
          state.V[0xF]);
   return state;
 }
 
 state_t add_nn_to_vx(state_t state) {
-  uint8_t x = VX;
-  uint8_t nn = state.memory[state.pc - 1];
-  state.V[x] += nn;
-  printf("add 0x%02X to V[%X], result: 0x%02X\n", nn, x, state.V[x]);
+  state.V[vx] += nn;
+  printf("add 0x%02X to V[%X], result: 0x%02X\n", nn, vx, state.V[vx]);
   return state;
 }
 
 state_t unknown_instruction(state_t state) {
   printf("-> unknown_instruction 0x%04X (opcode 0x%01X, sub_opcode "
          "0x%02X)\n",
-         state.cop.instruction, state.cop.opcode, state.cop.sub_opcode);
+         instruction, opcode, sub_opcode);
   exit(1);
   return state;
 }
 
 state_t set_index_register(state_t state) {
-  uint16_t address =
-      (state.memory[state.pc - 2] & 0x0F) << 8 | state.memory[state.pc - 1];
-  state.I = address;
-  printf("Set I to 0x%03X\n", address);
+  state.I = nnn;
+  printf("Set I to 0x%03X\n", nnn);
   return state;
 }
 
 state_t skip_if_vx_not_nn(state_t state) {
-  uint8_t x = VX;
-  uint8_t nn = state.memory[state.pc - 1];
-  if (state.V[x] != nn) {
+  if (state.V[vx] != nn) {
     state.pc += 2;
-    printf("skip_if_vx_not_nn V[%X] (0x%02X) != 0x%02X, skipping\n", x,
-           state.V[x], nn);
+    printf("skip_if_vx_not_nn V[%X] (0x%02X) != 0x%02X, skipping\n", vx,
+           state.V[vx], nn);
   } else {
-    printf("skip_if_vx_not_nn V[%X] (0x%02X) == 0x%02X, not skipping\n", x,
-           state.V[x], nn);
+    printf("skip_if_vx_not_nn V[%X] (0x%02X) == 0x%02X, not skipping\n", vx,
+           state.V[vx], nn);
   }
   return state;
 }
 
 state_t skip_if_vx_eq_nn(state_t state) {
-  uint8_t x = VX;
-  uint8_t nn = state.memory[state.pc - 1];
-
-  if (state.V[x] == nn) {
+  if (state.V[vx] == nn) {
     state.pc += 2;
-    printf("skip_if_vx_eq_nn V[%X] (0x%02X) == 0x%02X, skipping\n", x,
-           state.V[x], nn);
+    printf("skip_if_vx_eq_nn V[%X] (0x%02X) == 0x%02X, skipping\n", vx,
+           state.V[vx], nn);
   } else {
-    printf("skip_if_vx_eq_nn V[%X] (0x%02X) != 0x%02X, not skipping\n", x,
-           state.V[x], nn);
+    printf("skip_if_vx_eq_nn V[%X] (0x%02X) != 0x%02X, not skipping\n", vx,
+           state.V[vx], nn);
   }
   return state;
 }
 
 state_t skip_if_vx_eq_vy(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-
-  if (state.V[x] == state.V[y]) {
+  if (state.V[vx] == state.V[vy]) {
     state.pc += 2;
-    printf("skip_if_vx_eq_vy V[%X] (0x%02X) == V[%X] (0x%02X), skipping\n", x,
-           state.V[x], y, state.V[y]);
+    printf("skip_if_vx_eq_vy V[%X] (0x%02X) == V[%X] (0x%02X), skipping\n", vx,
+           state.V[vx], vy, state.V[vy]);
   } else {
     printf("skip_if_vx_eq_vy V[%X] (0x%02X) != V[%X] (0x%02X), not skipping\n",
-           x, state.V[x], y, state.V[y]);
+           vx, state.V[vx], vy, state.V[vy]);
   }
   return state;
 }
 
 state_t skip_if_vx_ne_vy(state_t state) {
-  uint8_t x = VX;
-  uint8_t y = VY;
-
-  if (state.V[x] != state.V[y]) {
+  if (state.V[vx] != state.V[vy]) {
     state.pc += 2;
-    printf("skip_if_vx_ne_vy V[%X] (0x%02X) != V[%X] (0x%02X), skipping\n", x,
-           state.V[x], y, state.V[y]);
+    printf("skip_if_vx_ne_vy V[%X] (0x%02X) != V[%X] (0x%02X), skipping\n", vx,
+           state.V[vx], vy, state.V[vy]);
   } else {
     printf("skip_if_vx_ne_vy V[%X] (0x%02X) == V[%X] (0x%02X), not skipping\n",
-           x, state.V[x], y, state.V[y]);
+           vx, state.V[vx], vy, state.V[vy]);
   }
   return state;
 }
 
 state_t vx_rand_and_nn(state_t state) {
-  uint8_t x = VX;
-  uint8_t nn = state.memory[state.pc - 1];
   uint8_t random_value = rand() % 256;
 
-  state.V[x] = random_value & nn;
-  printf("V[%X] = rand (0x%02X) AND 0x%02X : 0x%02X\n", x, random_value, nn,
-         state.V[x]);
+  state.V[vx] = random_value & nn;
+  printf("V[%X] = rand (0x%02X) AND 0x%02X : 0x%02X\n", vx, random_value, nn,
+         state.V[vx]);
 
   return state;
 }
 
 state_t jump_nnn_plus_v0(state_t state) {
-  uint16_t nnn =
-      ((state.memory[state.pc - 2] & 0x0F) << 8) | state.memory[state.pc - 1];
-  uint16_t new_pc = nnn + state.V[0]; // NNN + V0
-  printf("jump to 0x%03X + V[0] (0x%02X) : 0x%03X\n", nnn, state.V[0], new_pc);
-  state.pc = new_pc;
+  state.pc = nnn + state.V[0];
+  printf("jump to 0x%03X + V[0] (0x%02X) : 0x%03X\n", nnn, state.V[0],
+         state.pc);
   return state;
 }
 
@@ -365,14 +319,6 @@ state_t wait_for_kp_s_vx(state_t state) {
   return state;
 }
 
-#define instruction state.cop.instruction
-#define opcode state.cop.opcode
-#define sub_opcode state.cop.sub_opcode
-#define vx state.cop.vx
-#define vy state.cop.vy
-#define nn state.cop.nn
-#define nnn state.cop.nnn
-
 state_t sub_dispatch(state_t state, function_t sub_map[]) {
   printf("-> sub_dispatch for instruction 0x%04X (opcode 0x%01X, sub_opcode "
          "0x%02X)\n",
@@ -388,6 +334,7 @@ state_t sub_dispatch(state_t state, function_t sub_map[]) {
 static function_t sub_instruction_map_0[] = {
     [0xE] = return_from_subroutine,
 };
+
 static function_t sub_instruction_map_8[] = {
     [0x0] = set_vx_vy,      [0x1] = vx_or_vy,           [0x2] = vx_and_vy,
     [0x3] = vx_xor_vy,      [0x4] = vx_add_vy,          [0x5] = vx_sub_vy,
