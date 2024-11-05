@@ -85,6 +85,11 @@ void refresh_display(Tcl_Interp *interp, uint8_t display[64 * 32]) {
 typedef struct state_t state_t;
 typedef state_t (*function_t)(state_t);
 
+typedef struct {
+  uint16_t instruction, nnn;
+  uint8_t opcode, sub_opcode, n, nn, vx, vy;
+} curr_op_t;
+
 struct state_t {
   uint8_t memory[4096];
   uint8_t V[16]; // (V0 to VF)
@@ -93,6 +98,7 @@ struct state_t {
   uint8_t display[64 * 32];
   uint16_t stack[16];
   uint16_t sp;
+  curr_op_t cop;
   uint8_t delay_timer;
   uint8_t sound_timer;
 };
@@ -248,6 +254,9 @@ state_t add_nn_to_vx(state_t state) {
 }
 
 state_t unknown_instruction(state_t state) {
+  printf("-> unknown_instruction 0x%04X (opcode 0x%01X, sub_opcode "
+         "0x%02X)\n",
+         state.cop.instruction, state.cop.opcode, state.cop.sub_opcode);
   exit(1);
   return state;
 }
@@ -340,35 +349,34 @@ state_t jump_nnn_plus_v0(state_t state) {
   return state;
 }
 
-void wait_for_kp_s_vx(state_t *state, int vx_index) {
+state_t wait_for_kp_s_vx(state_t state) {
   pthread_mutex_lock(&key_mutex);
+  printf("wait_for_kp_s_vx\n");
 
   while (key_pressed == 0xFF) {
     pthread_cond_wait(&key_cond, &key_mutex);
   }
 
-  state->V[vx_index] = key_pressed;
-
+  state.V[VX] = key_pressed;
+  printf("wait_for_kp_s_vx key: 0x%02X\n", key_pressed);
   key_pressed = 0xFF;
   pthread_mutex_unlock(&key_mutex);
+
+  return state;
 }
 
-static function_t instruction_map[] = {
-    [0x1] = jump_to_address,        [0x2] = call_subroutine,
-    [0xE] = return_from_subroutine, [0x6] = set_vx_nn,
-    [0x0] = unknown_instruction,    [0xA] = set_index_register,
-    [0x7] = add_nn_to_vx,           [0x4] = skip_if_vx_not_nn,
-    [0x3] = skip_if_vx_eq_nn,       [0x5] = skip_if_vx_eq_vy,
-    [0x9] = skip_if_vx_ne_vy,       [0xB] = jump_nnn_plus_v0,
-    [0xC] = vx_rand_and_nn,
-};
+#define instruction state.cop.instruction
+#define opcode state.cop.opcode
+#define sub_opcode state.cop.sub_opcode
+#define vx state.cop.vx
+#define vy state.cop.vy
+#define nn state.cop.nn
+#define nnn state.cop.nnn
 
-static function_t instruction_8xy_map[] = {
-    [0x0] = set_vx_vy,      [0x1] = vx_or_vy,           [0x2] = vx_and_vy,
-    [0x3] = vx_xor_vy,      [0x4] = vx_add_vy,          [0x5] = vx_sub_vy,
-    [0x6] = vx_shift_right, [0x7] = vx_set_vy_minus_vx, [0xE] = vx_shift_left};
-
-state_t sub_dispatch(state_t state, function_t sub_map[], uint8_t sub_opcode) {
+state_t sub_dispatch(state_t state, function_t sub_map[]) {
+  printf("-> sub_dispatch for instruction 0x%04X (opcode 0x%01X, sub_opcode "
+         "0x%02X)\n",
+         instruction, opcode, sub_opcode);
   if (sub_map[sub_opcode]) {
     state = sub_map[sub_opcode](state);
   } else {
@@ -377,31 +385,60 @@ state_t sub_dispatch(state_t state, function_t sub_map[], uint8_t sub_opcode) {
   return state;
 }
 
+static function_t sub_instruction_map_0[] = {
+    [0xE] = return_from_subroutine,
+};
+static function_t sub_instruction_map_8[] = {
+    [0x0] = set_vx_vy,      [0x1] = vx_or_vy,           [0x2] = vx_and_vy,
+    [0x3] = vx_xor_vy,      [0x4] = vx_add_vy,          [0x5] = vx_sub_vy,
+    [0x6] = vx_shift_right, [0x7] = vx_set_vy_minus_vx, [0xE] = vx_shift_left};
+
+static function_t sub_instruction_map_e[] = {0};
+
+static function_t sub_instruction_map_f[] = {
+    [0x0A] = wait_for_kp_s_vx,
+};
+
+state_t dispatch_0(state_t state) {
+  return sub_dispatch(state, sub_instruction_map_0);
+}
+
+state_t dispatch_8(state_t state) {
+  return sub_dispatch(state, sub_instruction_map_8);
+}
+
+state_t dispatch_e(state_t state) {
+  return sub_dispatch(state, sub_instruction_map_e);
+}
+
+state_t dispatch_f(state_t state) {
+  return sub_dispatch(state, sub_instruction_map_f);
+}
+
+static function_t instruction_map[] = {
+    [0x0] = dispatch_0,        [0x1] = jump_to_address,
+    [0x2] = call_subroutine,   [0xE] = return_from_subroutine,
+    [0x6] = set_vx_nn,         [0xA] = set_index_register,
+    [0x7] = add_nn_to_vx,      [0x8] = dispatch_8,
+    [0x4] = skip_if_vx_not_nn, [0x3] = skip_if_vx_eq_nn,
+    [0x5] = skip_if_vx_eq_vy,  [0x9] = skip_if_vx_ne_vy,
+    [0xB] = jump_nnn_plus_v0,  [0xC] = vx_rand_and_nn,
+    [0xE] = dispatch_e,        [0xF] = dispatch_f};
+
 void run_vm(state_t state) {
   while (state.pc < 4096) {
-    uint16_t instruction =
-        (state.memory[state.pc] << 8) | state.memory[state.pc + 1];
+
+    instruction = (state.memory[state.pc] << 8) | state.memory[state.pc + 1];
+    opcode = (instruction & 0xF000) >> 12;
+    sub_opcode = instruction & 0x000F;
+    vx = (instruction & 0x0F00) >> 8;
+    vy = (instruction & 0x00F0) >> 4;
+    nn = instruction & 0x00FF;
+    nnn = instruction & 0x0FFF;
+
     state.pc += 2;
 
-    uint8_t opcode = (instruction & 0xF000) >> 12;
-
-    uint8_t sub_opcode = instruction & 0x000F;
-    uint8_t x = (instruction & 0x0F00) >> 8;
-    if (opcode == 0x0) {
-      if (sub_opcode == 0xE) {
-        state = return_from_subroutine(state);
-      } else {
-        state = unknown_instruction(state);
-      }
-    } else if (opcode == 0x8) {
-      state = sub_dispatch(state, instruction_8xy_map, sub_opcode);
-    } else if (opcode == 0xF) {
-      if (sub_opcode == 0x0A) {
-        wait_for_kp_s_vx(&state, x);
-      } else {
-        state = unknown_instruction(state);
-      }
-    } else if (instruction_map[opcode]) {
+    if (instruction_map[opcode]) {
       state = instruction_map[opcode](state);
     } else {
       state = unknown_instruction(state);
@@ -447,14 +484,31 @@ int main() {
   s.pc = 0x200;
 
   uint8_t program[] = {
-      0xF0,
-      0x0A, // F00A: wait for a key press, store in V0
-      0x30,
-      0x01, // 3001: skip next instruction if V0 == 0x01
-      0x12,
-      0x00, // 1200: jump to 0x200 (loop back to the beginning if V0 != 0x01)
-      0x00,
-      0xE0 // 00E0: clear the screen (exit condition when V0 == 0x01)
+      0x60, 0x01, // 6001: Set V0 to 0x01
+      0x61, 0x02, // 6102: Set V1 to 0x02
+      0x62, 0x03, // 6203: Set V2 to 0x03
+      0x63, 0x05, // 6305: Set V3 to 0x05
+      0xA3, 0x00, // A300: Set I to 0x300
+      0xC3, 0x0F, // C30F: V3 = random number AND 0x0F
+      0x73, 0x02, // 7302: Add 0x02 to V3
+      0x83, 0x14, // 8314: V3 += V1 (with carry)
+      0x83, 0x15, // 8315: V3 -= V1 (with borrow)
+      0x83, 0x16, // 8316: V3 >>= 1, VF = old LSB
+      0x83, 0x17, // 8317: V3 = V1 - V3, VF = 0 on borrow
+      0x83, 0x1E, // 831E: V3 <<= 1, VF = old MSB
+      0x43, 0x04, // 4304: Skip next instruction if V3 == 0x04
+      0x12, 0x1C, // 121C: Jump to address 0x21C (skip subroutine call)
+      0x22, 0x20, // 2220: Call subroutine at 0x220
+      0x12, 0x00, // 1200: Jump to 0x200 (infinite loop)
+
+      // Subroutine at 0x220
+      0x62, 0x04, // 6204: Set V2 to 0x04
+      0x52, 0x03, // 5203: Skip next instruction if V2 == V3
+      0x00, 0xEE, // 00EE: Return from subroutine
+
+      // Address 0x21C (skip point)
+      0x70, 0x01, // 7001: Increment V0 by 1
+      0x12, 0x00  // 1200: Jump to 0x200 (back to start of the main loop)
   };
 
   for (int i = 0; i < sizeof(program); i++) {
