@@ -9,7 +9,7 @@ pthread_cond_t key_cond = PTHREAD_COND_INITIALIZER;
 volatile uint8_t key_pressed = 0xFF;
 
 pthread_mutex_t display_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t display_cond = PTHREAD_COND_INITIALIZER;
+uint8_t display_dirty = 1;
 
 //#define printf(x, ...)
 
@@ -337,9 +337,16 @@ state_t draw_sprite(state_t state) {
   }
 
   printf("draw_sprite (V[%X] = %d, V[%X] = %d), h: %d\n", vx, x, vy, y, height);
-  pthread_mutex_lock(&display_mutex);
-  pthread_cond_signal(&display_cond);
-  pthread_mutex_unlock(&display_mutex);
+  // pthread_mutex_lock(&display_mutex);
+  display_dirty = 1;
+  // pthread_mutex_unlock(&display_mutex);
+  return state;
+}
+
+state_t set_i_to_sprite_location(state_t state) {
+  state.I = 0x050 + (state.V[vx] * 5);
+  printf("I = hex sprite for V[%X] (0x%02X), I set to: 0x%03X\n", vx,
+         state.V[vx], state.I);
   return state;
 }
 
@@ -360,16 +367,15 @@ static function_t sub_instruction_map_8[] = {
 static function_t sub_instruction_map_e[] = {
     [0x9E] = kp_skip_if_vx, [0xA1] = kp_skip_if_not_vx};
 
-static function_t sub_instruction_map_f[] = {
-    [0x07] = set_vx_to_delay_timer,
-    [0x15] = set_delay_timer_to_vx,
-    [0x18] = set_sound_timer_to_vx,
-    [0x1E] = add_vx_to_i,
-    [0x0A] = wait_for_kp_save_to_vx,
-    [0x33] = store_bcd_vx,
-    [0x55] = save_v0_vx,
-    [0x65] = load_v0_vx,
-};
+static function_t sub_instruction_map_f[] = {[0x07] = set_vx_to_delay_timer,
+                                             [0x15] = set_delay_timer_to_vx,
+                                             [0x18] = set_sound_timer_to_vx,
+                                             [0x1E] = add_vx_to_i,
+                                             [0x0A] = wait_for_kp_save_to_vx,
+                                             [0x33] = store_bcd_vx,
+                                             [0x55] = save_v0_vx,
+                                             [0x65] = load_v0_vx,
+                                             [0x9] = set_i_to_sprite_location};
 
 static function_t instruction_map[] = {
     [0x0] = dispatch_0,        [0x1] = jump_to_address,
@@ -379,16 +385,17 @@ static function_t instruction_map[] = {
     [0x4] = skip_if_vx_not_nn, [0x3] = skip_if_vx_eq_nn,
     [0x5] = skip_if_vx_eq_vy,  [0x9] = skip_if_vx_ne_vy,
     [0xB] = jump_nnn_plus_v0,  [0xC] = vx_rand_and_nn,
-    [0xE] = dispatch_e,        [0xF] = dispatch_f};
+    [0xD] = draw_sprite,       [0xE] = dispatch_e,
+    [0xF] = dispatch_f};
 
 /*******************************
  *   dispatch functions
  */
 
 state_t sub_dispatch(state_t state, function_t sub_map[]) {
-  printf("-> sub_dispatch for instruction 0x%04X (opcode 0x%01X, n "
+  /*printf("-> sub_dispatch for instruction 0x%04X (opcode 0x%01X, n "
          "0x%02X)\n",
-         instruction, opcode, n);
+         instruction, opcode, n);*/
   if (sub_map[n]) {
     state = sub_map[n](state);
   } else {

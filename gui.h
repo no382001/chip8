@@ -9,7 +9,6 @@ extern pthread_cond_t key_cond;
 extern volatile uint8_t key_pressed;
 
 extern pthread_mutex_t display_mutex;
-extern pthread_cond_t display_cond;
 
 extern uint8_t g_display[64 * 32];
 

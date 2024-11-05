@@ -5,7 +5,7 @@ extern pthread_cond_t key_cond;
 extern volatile uint8_t key_pressed;
 
 extern pthread_mutex_t display_mutex;
-extern pthread_cond_t display_cond;
+extern uint8_t display_dirty;
 
 int hex_key_to_value(const char *key) {
   if (!strcmp(key, "1"))
@@ -59,8 +59,11 @@ int keypress_cb(ClientData clientData, Tcl_Interp *interp, int argc,
 }
 
 void refresh_display_cb(ClientData cd) {
+  if (!display_dirty) {
+    return;
+  }
   Tcl_Interp *interp = (Tcl_Interp *)cd;
-  pthread_mutex_lock(&display_mutex);
+  // pthread_mutex_lock(&display_mutex);
 
   Tcl_Eval(interp, ".main.display delete all");
   for (int i = 0; i < 64 * 32; i++) {
@@ -76,7 +79,8 @@ void refresh_display_cb(ClientData cd) {
     }
   }
 
-  pthread_mutex_unlock(&display_mutex);
+  // pthread_mutex_unlock(&display_mutex);
+  display_dirty = 0;
 }
 
 void *tk_thread_main(void *arg) {

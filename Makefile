@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-g -std=gnu99 -Wall -Werror -pedantic
+CFLAGS=-g -std=gnu99 -Wall -Werror -pedantic -Wunused
 RM=rm -f
 SRC=main.c vm.c gui.c
 
