@@ -11,8 +11,13 @@ typedef struct state_t state_t;
 typedef state_t (*function_t)(state_t);
 
 typedef struct {
-  uint16_t instruction, nnn;
-  uint8_t opcode, sub_opcode, n, nn, vx, vy;
+  uint16_t instruction;
+  uint8_t opcode; // 0xF000
+  uint8_t n;      // 0x000F
+  uint8_t nn;     // 0x00FF
+  uint16_t nnn;   // 0x0FFF
+  uint8_t vx;     // 0x0F00
+  uint8_t vy;     // 0x00F0
 } curr_op_t;
 
 struct state_t {
@@ -30,7 +35,7 @@ struct state_t {
 
 #define instruction state.cop.instruction
 #define opcode state.cop.opcode
-#define sub_opcode state.cop.sub_opcode
+#define sub_opcode state.cop.n
 #define vx state.cop.vx
 #define vy state.cop.vy
 #define nn state.cop.nn
@@ -91,23 +96,6 @@ int keypress_cb(ClientData clientData, Tcl_Interp *interp, int argc,
 
   return TCL_OK;
 }
-
-void refresh_display(Tcl_Interp *interp, uint8_t display[64 * 32]) {
-  Tcl_Eval(interp, ".main.display delete all");
-  for (int i = 0; i < 64 * 32; i++) {
-    int x = i % 64;
-    int y = i / 64;
-    if (display[i]) {
-      char cmd[256];
-      snprintf(cmd, sizeof(cmd),
-               ".main.display create rectangle %d %d %d %d -fill white "
-               "-outline white",
-               x * 10, y * 10, (x + 1) * 10, (y + 1) * 10);
-      Tcl_Eval(interp, cmd);
-    }
-  }
-}
-
 //#define printf(x, ...)
 
 state_t jump_to_address(state_t state) {
@@ -123,6 +111,14 @@ state_t return_from_subroutine(state_t state) {
   } else {
     printf("stack underflow on return, exiting...\n");
     exit(1);
+  }
+  return state;
+}
+
+state_t clear_display(state_t state) {
+  printf("clear_display\n");
+  for (uint8_t i = 0; i < 64 * 32; i++) {
+    state.display[i] = 0;
   }
   return state;
 }
@@ -303,19 +299,93 @@ state_t jump_nnn_plus_v0(state_t state) {
   return state;
 }
 
-state_t wait_for_kp_s_vx(state_t state) {
+state_t wait_for_kp_save_to_vx(state_t state) {
   pthread_mutex_lock(&key_mutex);
-  printf("wait_for_kp_s_vx\n");
+  printf("wait_for_kp_save_to_vx\n");
 
   while (key_pressed == 0xFF) {
     pthread_cond_wait(&key_cond, &key_mutex);
   }
 
   state.V[VX] = key_pressed;
-  printf("wait_for_kp_s_vx key: 0x%02X\n", key_pressed);
+  printf("wait_for_kp_save_to_vx key: 0x%02X\n", key_pressed);
   key_pressed = 0xFF;
   pthread_mutex_unlock(&key_mutex);
 
+  return state;
+}
+
+state_t kp_skip_if_vx(state_t state) {
+  if (key_pressed == state.V[vx]) {
+    state.pc += 2;
+    printf("kp_skip_if_vx: V[%X] (0x%02X) skipping\n", vx, state.V[vx]);
+  } else {
+    printf("kp_skip_if_vx: V[%X] (0x%02X) not skipping\n", vx, state.V[vx]);
+  }
+
+  return state;
+}
+
+state_t kp_skip_if_not_vx(state_t state) {
+  if (key_pressed != state.V[vx]) {
+    state.pc += 2;
+    printf("kp_skip_if_not_vx: V[%X] (0x%02X) skipping\n", vx, state.V[vx]);
+  } else {
+    printf("kp_skip_if_not_vx: V[%X] (0x%02X) not skipping\n", vx, state.V[vx]);
+  }
+
+  return state;
+}
+
+state_t store_bcd_vx(state_t state) {
+  uint8_t value = state.V[vx];
+  state.memory[state.I] = value / 100;
+  state.memory[state.I + 1] = (value / 10) % 10;
+  state.memory[state.I + 2] = value % 10;
+  printf("store_bcd_vx V[%X] = %d as [%d, %d, %d] at I (0x%03X)\n", vx, value,
+         state.memory[state.I], state.memory[state.I + 1],
+         state.memory[state.I + 2], state.I);
+  return state;
+}
+
+state_t save_v0_vx(state_t state) {
+  for (uint8_t i = 0; i <= vx; i++) {
+    state.memory[state.I + i] = state.V[i];
+    printf("save_v0_vx V[%X] = 0x%02X at 0x%03X\n", i, state.V[i], state.I + i);
+  }
+  return state;
+}
+
+state_t load_v0_vx(state_t state) {
+  for (uint8_t i = 0; i <= vx; i++) {
+    state.V[i] = state.memory[state.I + i];
+    printf("load_v0_vx [0x%03X] = 0x%02X into V[%X]\n", state.I + i, state.V[i],
+           i);
+  }
+  return state;
+}
+
+state_t set_vx_to_delay_timer(state_t state) {
+  state.V[vx] = state.delay_timer;
+  printf("set_vx_to_delay_timer: V[%X] to 0x%02X\n", vx, state.delay_timer);
+  return state;
+}
+
+state_t set_delay_timer_to_vx(state_t state) {
+  state.delay_timer = state.V[vx];
+  printf("set_delay_timer_to_vx: V[%X] = 0x%02X\n", vx, state.V[vx]);
+  return state;
+}
+
+state_t set_sound_timer_to_vx(state_t state) {
+  state.sound_timer = state.V[vx];
+  printf("set_sound_timer_to_vx: V[%X] = 0x%02X\n", vx, state.V[vx]);
+  return state;
+}
+
+state_t add_vx_to_i(state_t state) {
+  state.I += state.V[vx];
+  printf("add_vx_to_i:  V[%X] + (0x%02X) = 0x%03X\n", vx, state.V[vx], state.I);
   return state;
 }
 
@@ -332,6 +402,7 @@ state_t sub_dispatch(state_t state, function_t sub_map[]) {
 }
 
 static function_t sub_instruction_map_0[] = {
+    [0x0] = clear_display,
     [0xE] = return_from_subroutine,
 };
 
@@ -340,10 +411,18 @@ static function_t sub_instruction_map_8[] = {
     [0x3] = vx_xor_vy,      [0x4] = vx_add_vy,          [0x5] = vx_sub_vy,
     [0x6] = vx_shift_right, [0x7] = vx_set_vy_minus_vx, [0xE] = vx_shift_left};
 
-static function_t sub_instruction_map_e[] = {0};
+static function_t sub_instruction_map_e[] = {
+    [0x9E] = kp_skip_if_vx, [0xA1] = kp_skip_if_not_vx};
 
 static function_t sub_instruction_map_f[] = {
-    [0x0A] = wait_for_kp_s_vx,
+    [0x07] = set_vx_to_delay_timer,
+    [0x15] = set_delay_timer_to_vx,
+    [0x18] = set_sound_timer_to_vx,
+    [0x1E] = add_vx_to_i,
+    [0x0A] = wait_for_kp_save_to_vx,
+    [0x33] = store_bcd_vx,
+    [0x55] = save_v0_vx,
+    [0x65] = load_v0_vx,
 };
 
 state_t dispatch_0(state_t state) {
