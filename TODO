@@ -1,4 +1,3 @@
-DXYN        | sprite vx vy N    | draw sprite at VX, VY, height N, VF = 1 on collision
 FX29        | I = hex vx        | set I to the location of sprite for digit VX
 
 - delay and beep dont work
