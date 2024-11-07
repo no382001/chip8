@@ -1,19 +1,23 @@
 #pragma once
+#include "MiniFB.h"
 #include "vm.h"
-#include <pthread.h>
-#include <tcl.h>
-#include <tk.h>
 
-extern pthread_mutex_t key_mutex;
-extern pthread_cond_t key_cond;
-extern volatile uint8_t key_pressed;
+#define CHIP8_W 64
+#define CHIP8_H 32
+#define KEYBOARD_ROWS 4
+#define KEYBOARD_COLS 4
+#define KEY_SIZE 20
+#define PIXEL_SIZE 5
 
-extern pthread_mutex_t display_mutex;
+#define WINDOW_W 400
+#define WINDOW_H WINDOW_W
 
-extern uint8_t g_display[64 * 32];
+#define BORDER_SIZE 2
+#define BORDER_COLOR 0xFF888888
 
-int hex_key_to_value(const char *key);
-int keypress_cb(ClientData clientData, Tcl_Interp *interp, int argc,
-                const char *argv[]);
-void refresh_display_cb(ClientData cd);
-void *tk_thread_main(void *arg);
+void keyboard_callback(struct mfb_window *window, mfb_key key, mfb_key_mod mod,
+                       bool is_pressed);
+void mouse_callback(struct mfb_window *window, mfb_mouse_button button,
+                    mfb_key_mod mod, bool is_pressed);
+
+void draw_chip8_display(uint32_t *buffer);
