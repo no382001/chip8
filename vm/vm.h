@@ -68,7 +68,7 @@ void add_vx_to_i(state_t *state);
 void draw_sprite(state_t *state);
 void set_i_to_sprite_location(state_t *state);
 
-void sub_dispatch(state_t *state, function_t sub_map[]);
+void sub_dispatch(state_t *state, uint8_t mask, function_t sub_map[]);
 void dispatch_0(state_t *state);
 void dispatch_8(state_t *state);
 void dispatch_e(state_t *state);

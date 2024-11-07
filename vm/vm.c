@@ -299,8 +299,8 @@ void set_i_to_sprite_location(state_t *state) {
  */
 
 static function_t sub_instruction_map_0[] = {
-    [0x0] = clear_display,
-    [0xE] = return_from_subroutine,
+    [0xE0] = clear_display,
+    [0xEE] = return_from_subroutine,
 };
 
 static function_t sub_instruction_map_8[] = {
@@ -309,17 +309,17 @@ static function_t sub_instruction_map_8[] = {
     [0x6] = vx_shift_right, [0x7] = vx_set_vy_minus_vx, [0xE] = vx_shift_left};
 
 static function_t sub_instruction_map_e[] = {
-    [0xE] = kp_skip_if_vx, [0x1] = kp_skip_if_not_vx};
+    [0x9E] = kp_skip_if_vx, [0xA1] = kp_skip_if_not_vx};
 
-static function_t sub_instruction_map_f[] = {[0x7] = set_vx_to_delay_timer,
+static function_t sub_instruction_map_f[] = {[0x07] = set_vx_to_delay_timer,
+                                             [0x0A] = wait_for_kp_save_to_vx,
                                              [0x15] = set_delay_timer_to_vx,
                                              [0x18] = set_sound_timer_to_vx,
-                                             [0xE] = add_vx_to_i,
-                                             [0xA] = wait_for_kp_save_to_vx,
-                                             [0x3] = store_bcd_vx,
+                                             [0x1E] = add_vx_to_i,
+                                             [0x29] = set_i_to_sprite_location,
+                                             [0x33] = store_bcd_vx,
                                              [0x55] = save_v0_vx,
-                                             [0x5] = load_v0_vx,
-                                             [0x9] = set_i_to_sprite_location};
+                                             [0x65] = load_v0_vx};
 
 static function_t instruction_map[] = {
     [0x0] = dispatch_0,        [0x1] = jump_to_address,
@@ -336,24 +336,32 @@ static function_t instruction_map[] = {
  *   dispatch functions
  */
 
-void sub_dispatch(state_t *state, function_t sub_map[]) {
+void sub_dispatch(state_t *state, uint8_t sub, function_t sub_map[]) {
   /*printf("-> sub_dispatch for instruction 0x%04X (opcode 0x%01X, n "
          "0x%02X)\n",
-         instruction, opcode, n);*/
-  if (sub_map[n]) {
-    sub_map[n](state);
+         instruction, opcode, sub);*/
+  if (sub_map[sub]) {
+    sub_map[sub](state);
   } else {
     unknown_instruction(state);
   }
 }
 
-void dispatch_0(state_t *state) { sub_dispatch(state, sub_instruction_map_0); }
+void dispatch_0(state_t *state) {
+  sub_dispatch(state, nn, sub_instruction_map_0);
+}
 
-void dispatch_8(state_t *state) { sub_dispatch(state, sub_instruction_map_8); }
+void dispatch_8(state_t *state) {
+  sub_dispatch(state, n, sub_instruction_map_8);
+}
 
-void dispatch_e(state_t *state) { sub_dispatch(state, sub_instruction_map_e); }
+void dispatch_e(state_t *state) {
+  sub_dispatch(state, nn, sub_instruction_map_e);
+}
 
-void dispatch_f(state_t *state) { sub_dispatch(state, sub_instruction_map_f); }
+void dispatch_f(state_t *state) {
+  sub_dispatch(state, nn, sub_instruction_map_f);
+}
 
 /*******************************
  *   main loop
