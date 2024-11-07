@@ -312,13 +312,13 @@ static function_t sub_instruction_map_e[] = {
     [0xE] = kp_skip_if_vx, [0x1] = kp_skip_if_not_vx};
 
 static function_t sub_instruction_map_f[] = {[0x7] = set_vx_to_delay_timer,
-                                             [0x5] = set_delay_timer_to_vx,
-                                             [0x8] = set_sound_timer_to_vx,
+                                             [0x15] = set_delay_timer_to_vx,
+                                             [0x18] = set_sound_timer_to_vx,
                                              [0xE] = add_vx_to_i,
-                                             [0x0A] = wait_for_kp_save_to_vx,
-                                             [0x33] = store_bcd_vx,
+                                             [0xA] = wait_for_kp_save_to_vx,
+                                             [0x3] = store_bcd_vx,
                                              [0x55] = save_v0_vx,
-                                             [0x65] = load_v0_vx,
+                                             [0x5] = load_v0_vx,
                                              [0x9] = set_i_to_sprite_location};
 
 static function_t instruction_map[] = {

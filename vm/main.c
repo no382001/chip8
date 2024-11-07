@@ -47,9 +47,10 @@ int main(int argc, char *argv[]) {
   struct mfb_window *window =
       mfb_open_ex("chip8", WINDOW_W, WINDOW_H, WF_RESIZABLE);
 
-  if (!window)
+  if (!window) {
     printf("failed to create window...\n");
-  return -1;
+    return -1;
+  }
 
   mfb_set_keyboard_callback(window, keyboard_callback);
   mfb_set_mouse_button_callback(window, mouse_callback);
