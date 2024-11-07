@@ -1,3 +1,6 @@
-[submodule "minifb"]
-	path = minifb
+[submodule "vm/minifb"]
+	path = vm/minifb
 	url = https://github.com/emoon/minifb.git
+[submodule "vm/chip8-test-suite"]
+	path = vm/chip8-test-suite
+	url = https://github.com/Timendus/chip8-test-suite.git
