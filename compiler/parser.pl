@@ -6,8 +6,16 @@ program(Program) --> statements(Program), !.
 statements([X|Xs]) --> statement(X), ws, statements(Xs).
 statements([]) --> [].
 
-ws --> [W], { char_type(W, white) }, !, ws.
+ws --> whitespace, !, ws.
+ws --> comment, !, ws.
 ws --> [].
+
+whitespace --> [W], { char_type(W, white) }.
+
+comment --> "//", rest_of_line.
+
+rest_of_line --> [C], { C \= 10 }, !, rest_of_line.
+rest_of_line --> [10] | [].
 
 statement(assign(Var, Expr)) --> variable(Var), ws, "=", ws, expression(Expr), ";", ws.
 statement(declaration(Var, Value)) --> "auto", ws, variable(Var), ws, "=", ws, expression(Value), ";", ws.
@@ -36,7 +44,8 @@ hex_digit(D) --> [D], {
     (char_type(D, digit) ; member(D, `abcdefABCDEF`))
 }.
 
-term(num(N)) --> integer(N) | hex_number(N).
+term(num(N)) --> integer(N).
+term(num(N)) --> hex_number(N).
 term(var(Var)) --> variable(Var).
 
 enumeration(X) --> "{", ws, array(X), "}", ws.
@@ -52,7 +61,13 @@ operator(==) --> "==".
 operator(<) --> "<".
 operator(>) --> ">".
 
-variable(Var) --> string_without(" \t\n=;(){},", Cs), { atom_codes(Var, Cs) }.
+variable(Var) -->
+    [C], { char_type(C, alpha) },
+    variable_chars(Cs),
+    { atom_codes(Var, [C|Cs]) }.
+
+variable_chars([C|Cs]) --> [C], { char_type(C, alnum) }, variable_chars(Cs).
+variable_chars([]) --> [].
 
 % do i need this at all? probably not, just for main maybe, i could just have labels instead
 % and aliases of course
@@ -107,4 +122,6 @@ main :-
     run_test("test 8: array assignment", "r = { 0x80, 0x40, 0x20, 0x10 };",
              [assign(r, [num(128), num(64), num(32), num(16)])]),
 
+    run_test("test 9: single line comment", "r = { 0x80, 0x40, 0x20, 0x10 }; // this is a comment",
+             [assign(r, [num(128), num(64), num(32), num(16)])]),
     repl.
