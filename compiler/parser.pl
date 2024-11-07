@@ -26,21 +26,16 @@ statement(assign(Var, Expr)) --> variable(Var), ws, "=", ws, expression(Expr), "
 statement(declaration(Var, Value)) --> "auto", ws, variable(Var), ws, "=", ws, expression(Value), ";", ws.
 statement(declaration_list(Declarations)) --> "auto", ws, declaration_list(Declarations), ";", ws.
 statement(while(Cond, Body)) --> "while(", ws, expression(Cond), ")", ws, block(Body).
-
+statement(if_else(Cond, IfBody, ElseBody)) --> if_statement(Cond, IfBody), branching(ElseBody).
+statement(fundecl(Func, Args, Body)) --> function_call(Func, Args), block(Body), ws.
+statement(funcall(Func, Args)) --> function_call(Func, Args), ";", ws.
 
 if_statement(Cond, IfBody) -->
     "if(", ws, expression(Cond), ")", ws, block(IfBody), ws.
 
 branching(ElseBody) -->
     "else", ws, block(ElseBody).
-branching(if_else(Cond, IfBody, ElseBody)) -->
-    "else", ws, if_statement(Cond,IfBody), ws, branching.
 branching([]) --> [].
-
-statement(if_else(Cond, IfBody, ElseBody)) --> if_statement(Cond, IfBody), branching(ElseBody).
-
-statement(fundecl(Func, Args, Body)) --> function_call(Func, Args), block(Body), ws.
-statement(funcall(Func, Args)) --> function_call(Func, Args), ";", ws.
 
 block(Body) --> "{", ws, statements(Body), "}", ws.
 
