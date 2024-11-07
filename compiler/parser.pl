@@ -22,12 +22,27 @@ block(Body) --> "{", ws, statements(Body), "}", ws.
 expression(num(N)) --> integer(N).
 expression(var(Var)) --> variable(Var).
 expression(binop(Op, Lhs, Rhs)) --> term(Lhs), ws, operator(Op), ws, expression(Rhs).
+expression(X) --> enumeration(X).
 
-term(num(N)) --> integer(N).
+hex_number(N) -->
+    "0x", hex_digits(Digits),
+    { atom_codes(Atom, [0'0, 0'x | Digits]),
+      atom_number(Atom, N) }.
+
+hex_digits([D|Ds]) --> hex_digit(D), hex_digits(Ds).
+hex_digits([D]) --> hex_digit(D).
+
+hex_digit(D) --> [D], { 
+    (char_type(D, digit) ; member(D, `abcdefABCDEF`))
+}.
+
+term(num(N)) --> integer(N) | hex_number(N).
 term(var(Var)) --> variable(Var).
 
-array([X|Xs]) --> term(X), ws, "," , array(Xs).
-array([]) --> [].
+enumeration(X) --> "{", ws, array(X), "}", ws.
+
+array([X|Xs]) --> term(X), ws, ",", ws, array(Xs).
+array([X]) --> term(X), ws.
 
 operator(+) --> "+".
 operator(-) --> "-".
@@ -58,9 +73,9 @@ run_test(TestName, Input, Expected) :-
     ).
 
 repl :-
-    nl, % `exit` to quit
+    nl,
     read_line_to_string(user_input, Input),
-    ( Input = "exit" -> 
+    ( Input = "exit" -> % `exit` to quit 
         write('exiting repl...'), nl
     ;   string_codes(Input, InputCodes),
         ( phrase(program(AST), InputCodes) -> 
