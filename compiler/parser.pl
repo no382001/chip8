@@ -10,19 +10,36 @@ ws --> whitespace, !, ws.
 ws --> comment, !, ws.
 ws --> [].
 
-whitespace --> [W], { char_type(W, white) }.
+whitespace --> [W], { char_type(W, white) ; W = 10}.
 
 comment --> "//", rest_of_line.
 
 rest_of_line --> [C], { C \= 10 }, !, rest_of_line.
 rest_of_line --> [10] | [].
 
+declaration_list([assign(Var, Expr) | Rest]) -->
+    variable(Var), ws, "=", ws, expression(Expr), ws, ",", ws, declaration_list(Rest).
+declaration_list([assign(Var, Expr)]) -->
+    variable(Var), ws, "=", ws, expression(Expr), ws.
+
 statement(assign(Var, Expr)) --> variable(Var), ws, "=", ws, expression(Expr), ";", ws.
 statement(declaration(Var, Value)) --> "auto", ws, variable(Var), ws, "=", ws, expression(Value), ";", ws.
+statement(declaration_list(Declarations)) --> "auto", ws, declaration_list(Declarations), ";", ws.
 statement(while(Cond, Body)) --> "while(", ws, expression(Cond), ")", ws, block(Body).
-statement(if_else(Cond, IfBody, ElseBody)) --> 
-    "if(", ws, expression(Cond), ")", ws, block(IfBody), ws, 
+
+
+if_statement(Cond, IfBody) -->
+    "if(", ws, expression(Cond), ")", ws, block(IfBody), ws.
+
+branching(ElseBody) -->
     "else", ws, block(ElseBody).
+branching(if_else(Cond, IfBody, ElseBody)) -->
+    "else", ws, if_statement(Cond,IfBody), ws, branching.
+branching([]) --> [].
+
+statement(if_else(Cond, IfBody, ElseBody)) --> if_statement(Cond, IfBody), branching(ElseBody).
+
+statement(fundecl(Func, Args, Body)) --> function_call(Func, Args), block(Body), ws.
 statement(funcall(Func, Args)) --> function_call(Func, Args), ";", ws.
 
 block(Body) --> "{", ws, statements(Body), "}", ws.
@@ -31,6 +48,7 @@ expression(num(N)) --> integer(N).
 expression(var(Var)) --> variable(Var).
 expression(binop(Op, Lhs, Rhs)) --> term(Lhs), ws, operator(Op), ws, expression(Rhs).
 expression(X) --> enumeration(X).
+expression(funcall(Func,Args)) --> function_call(Func,Args).
 
 hex_number(N) -->
     "0x", hex_digits(Digits),
@@ -123,5 +141,12 @@ main :-
              [assign(r, [num(128), num(64), num(32), num(16)])]),
 
     run_test("test 9: single line comment", "r = { 0x80, 0x40, 0x20, 0x10 }; // this is a comment",
-             [assign(r, [num(128), num(64), num(32), num(16)])]),
-    repl.
+             [assign(r, [num(128), num(64), num(32), num(16)])]).
+
+
+parse_file(FileName, AST) :-
+    open(FileName, read, Stream),
+    read_string(Stream, _, FileContent),
+    close(Stream),
+    string_codes(FileContent, Codes),
+    phrase(program(AST), Codes).

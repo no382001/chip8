@@ -1,0 +1,35 @@
+r = { 0x80, 0x40, 0x20, 0x10 };
+r = { 0x80, 0x40, 0x20, 0x10 };
+dot = { 0x80 };
+
+add(x,y)
+{
+    x = x + y;
+}
+
+main(){
+    auto x = 3, xm = 64;
+    auto y = 3, ym = 32;
+    auto dir = 1;
+    auto A = 7, D = 9, W = 5, S = 8;
+
+    while(1)
+    {
+        auto a = getchar();
+        if(a == A){
+            dir = 0;
+        }
+
+        if(a == A){
+            dir = 0;
+        } else {
+            dir = 1;
+        }
+
+        if(a == A){
+            dir = 0;
+        } else if (a == B) {
+            dir = 1;
+        }
+    }
+}
