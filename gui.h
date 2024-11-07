@@ -19,5 +19,4 @@ void keyboard_callback(struct mfb_window *window, mfb_key key, mfb_key_mod mod,
                        bool is_pressed);
 void mouse_callback(struct mfb_window *window, mfb_mouse_button button,
                     mfb_key_mod mod, bool is_pressed);
-
 void draw_chip8_display(uint32_t *buffer);

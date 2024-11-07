@@ -9,4 +9,9 @@ make: format
 	$(CC) $(CFLAGS) $(SRC) $(INC) $(LINK)
 
 format:
-	find . \( -name "*.c" -o -name "*.h" \) -exec clang-format -i {} \;
+	@changed_files=$$(git diff --name-only -- '*.c' '*.h'); \
+	if [ -n "$$changed_files" ]; then \
+		echo "$$changed_files" | xargs clang-format -i; \
+	else \
+		echo "no changes to format."; \
+	fi
