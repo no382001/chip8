@@ -1,5 +1,6 @@
 #include "MiniFB.h"
 #include "gui.h"
+#include "time.h"
 #include "vm.h"
 
 #define MEMORY_START 0x200
@@ -31,6 +32,70 @@ void load_rom(const char *filename, state_t *state) {
 extern uint32_t buffer[WINDOW_W * WINDOW_H];
 extern uint8_t chip8_display[CHIP8_W * CHIP8_H];
 
+static uint8_t key_pressed = 0xFF;
+void keyboard_callback(struct mfb_window *window, mfb_key key, mfb_key_mod mod,
+                       bool is_pressed) {
+  if (is_pressed && key_pressed == 0xFF) {
+    switch (key) {
+    case KB_KEY_ESCAPE:
+      mfb_close(window);
+      break;
+    case KB_KEY_1:
+      key_pressed = 0x1;
+      break;
+    case KB_KEY_2:
+      key_pressed = 0x2;
+      break;
+    case KB_KEY_3:
+      key_pressed = 0x3;
+      break;
+    case KB_KEY_4:
+      key_pressed = 0xC;
+      break;
+    case KB_KEY_Q:
+      key_pressed = 0x4;
+      break;
+    case KB_KEY_W:
+      key_pressed = 0x5;
+      break;
+    case KB_KEY_E:
+      key_pressed = 0x6;
+      break;
+    case KB_KEY_R:
+      key_pressed = 0xD;
+      break;
+    case KB_KEY_A:
+      key_pressed = 0x7;
+      break;
+    case KB_KEY_S:
+      key_pressed = 0x8;
+      break;
+    case KB_KEY_D:
+      key_pressed = 0x9;
+      break;
+    case KB_KEY_F:
+      key_pressed = 0xE;
+      break;
+    case KB_KEY_Z:
+      key_pressed = 0xA;
+      break;
+    case KB_KEY_X:
+      key_pressed = 0x0;
+      break;
+    case KB_KEY_C:
+      key_pressed = 0xB;
+      break;
+    case KB_KEY_V:
+      key_pressed = 0xF;
+      break;
+    default:
+      break;
+    }
+  } else {
+    key_pressed = 0xFF;
+  }
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "usage: %s <rom file>\n", argv[0]);
@@ -39,7 +104,7 @@ int main(int argc, char *argv[]) {
 
   srand((unsigned int)time(NULL));
 
-  state_t s = {.display = chip8_display, .key_pressed = 0xFF};
+  state_t s = {.display = chip8_display, .key_pressed = &key_pressed};
   s.pc = MEMORY_START;
 
   load_rom(argv[1], &s);
@@ -53,9 +118,11 @@ int main(int argc, char *argv[]) {
   }
 
   mfb_set_keyboard_callback(window, keyboard_callback);
-  mfb_set_mouse_button_callback(window, mouse_callback);
 
+  // clock_t start_time, end_time = {0};
+  // double frame_time = {0};
   do {
+    // start_time = clock();
 
     mfb_update_state state = mfb_update(window, buffer);
     if (state != STATE_OK)
@@ -64,7 +131,11 @@ int main(int argc, char *argv[]) {
     vm_cycle(&s);
     draw_chip8_display(buffer);
 
-  } while (mfb_wait_sync(window));
+    // end_time = clock();
+    // frame_time = ((double)(end_time - start_time) / CLOCKS_PER_SEC) *
+    // 1000.0; printf("frame time: %.2f ms\n", frame_time);
+
+  } while (1 /*mfb_wait_sync(window)*/);
 
   return 0;
 }

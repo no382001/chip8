@@ -1,7 +1,5 @@
 #include "vm.h"
 
-volatile uint8_t key_pressed = 0xFF;
-
 //#define printf(x, ...)
 
 /*******************************
@@ -191,13 +189,15 @@ void jump_nnn_plus_v0(state_t *state) {
 
 void wait_for_kp_save_to_vx(state_t *state) {
   printf("wait_for_kp_save_to_vx\n");
-  state->V[vx] = state->key_pressed;
-  printf("wait_for_kp_save_to_vx key: 0x%02X\n", state->key_pressed);
-  state->key_pressed = 0xFF;
+  while (*state->key_pressed == 0xFF) {
+  }
+  state->V[vx] = *state->key_pressed;
+  printf("wait_for_kp_save_to_vx key: 0x%02X\n", *state->key_pressed);
+  *state->key_pressed = 0xFF;
 }
 
 void kp_skip_if_vx(state_t *state) {
-  if (key_pressed == state->V[vx]) {
+  if (*state->key_pressed == state->V[vx]) {
     state->pc += 2;
     printf("kp_skip_if_vx: V[%X] (0x%02X) skipping\n", vx, state->V[vx]);
   } else {
@@ -206,7 +206,7 @@ void kp_skip_if_vx(state_t *state) {
 }
 
 void kp_skip_if_not_vx(state_t *state) {
-  if (key_pressed != state->V[vx]) {
+  if (*state->key_pressed != state->V[vx]) {
     state->pc += 2;
     printf("kp_skip_if_not_vx: V[%X] (0x%02X) skipping\n", vx, state->V[vx]);
   } else {
@@ -274,7 +274,7 @@ void draw_sprite(state_t *state) {
     pixel = state->memory[state->I + row];
     for (uint8_t col = 0; col < 8; col++) {
       if (pixel & (0x80 >> col)) {
-        int display_index = x + col + ((y + row) * 64);
+        int display_index = ((x + col) % 64) + (((y + row) % 32) * 64);
 
         if (state->display[display_index] == 1) {
           state->V[0xF] = 1;
@@ -289,7 +289,7 @@ void draw_sprite(state_t *state) {
 }
 
 void set_i_to_sprite_location(state_t *state) {
-  state->I = 0x050 + (state->V[vx] * 5);
+  state->I = state->V[vx] * 5;
   printf("I = hex sprite for V[%X] (0x%02X), I set to: 0x%03X\n", vx,
          state->V[vx], state->I);
 }

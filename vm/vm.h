@@ -29,7 +29,7 @@ struct state_t {
   curr_op_t cop;
   uint8_t delay_timer;
   uint8_t sound_timer;
-  uint8_t key_pressed;
+  uint8_t *key_pressed;
 };
 
 void jump_to_address(state_t *state);
