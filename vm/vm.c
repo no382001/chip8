@@ -189,28 +189,39 @@ void jump_nnn_plus_v0(state_t *state) {
 
 void wait_for_kp_save_to_vx(state_t *state) {
   printf("wait_for_kp_save_to_vx\n");
-  while (*state->key_pressed == 0xFF) {
-  }
-  state->V[vx] = *state->key_pressed;
-  printf("wait_for_kp_save_to_vx key: 0x%02X\n", *state->key_pressed);
-  *state->key_pressed = 0xFF;
+  do {
+    pressed = 0xFF;
+    state->input.k_cb(state);
+  } while (pressed == 0xFF);
+  state->V[vx] = pressed;
+  printf("wait_for_kp_save_to_vx key: 0x%02X\n", pressed);
 }
 
 void kp_skip_if_vx(state_t *state) {
-  if (*state->key_pressed == state->V[vx]) {
+  printf("kp_skip_if_vx: \n");
+  do {
+    pressed = 0xFF;
+    state->input.k_cb(state);
+  } while (pressed == 0xFF);
+  if (pressed == state->V[vx]) {
     state->pc += 2;
-    printf("kp_skip_if_vx: V[%X] (0x%02X) skipping\n", vx, state->V[vx]);
+    printf("V[%X] (0x%02X) skipping\n", vx, state->V[vx]);
   } else {
-    printf("kp_skip_if_vx: V[%X] (0x%02X) not skipping\n", vx, state->V[vx]);
+    printf("V[%X] (0x%02X) not skipping\n", vx, state->V[vx]);
   }
 }
 
 void kp_skip_if_not_vx(state_t *state) {
-  if (*state->key_pressed != state->V[vx]) {
+  printf("kp_skip_if_not_vx: \n");
+  do {
+    pressed = 0xFF;
+    state->input.k_cb(state);
+  } while (pressed == 0xFF);
+  if (pressed != state->V[vx]) {
     state->pc += 2;
-    printf("kp_skip_if_not_vx: V[%X] (0x%02X) skipping\n", vx, state->V[vx]);
+    printf("V[%X] (0x%02X) skipping\n", vx, state->V[vx]);
   } else {
-    printf("kp_skip_if_not_vx: V[%X] (0x%02X) not skipping\n", vx,
+    printf("V[%X] (0x%02X) not skipping\n", vx,
            state->V[vx]);
   }
 }

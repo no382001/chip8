@@ -5,6 +5,8 @@
 #include <string.h>
 #include <time.h>
 
+#include "MiniFB.h"
+
 typedef struct state_t state_t;
 typedef void (*function_t)(state_t *);
 
@@ -18,6 +20,14 @@ typedef struct {
   uint8_t vy;     // 0x00F0
 } curr_op_t;
 
+typedef void (*keyboard_cb_t)(state_t *state);
+
+typedef struct {
+  uint8_t key_pressed;
+  keyboard_cb_t k_cb;
+  struct mfb_window *window;
+} input_t;
+
 struct state_t {
   uint8_t memory[4096];
   uint8_t V[16]; // (V0 ... VF)
@@ -29,7 +39,7 @@ struct state_t {
   curr_op_t cop;
   uint8_t delay_timer;
   uint8_t sound_timer;
-  uint8_t *key_pressed;
+  input_t input;
 };
 
 void jump_to_address(state_t *state);
@@ -75,3 +85,4 @@ void dispatch_e(state_t *state);
 void dispatch_f(state_t *state);
 
 void vm_cycle(state_t *state);
+#define pressed state->input.key_pressed

@@ -23,7 +23,13 @@ void load_rom(const char *filename, state_t *state) {
     exit(1);
   }
 
-  fread(state->memory + MEMORY_START, 1, rom_size, rom);
+  long bytes_read = fread(state->memory + MEMORY_START, 1, rom_size, rom);
+
+  if (bytes_read != rom_size) {
+    fprintf(stderr, "error reading rom file\n");
+    fclose(rom);
+    exit(1);
+  }
   fclose(rom);
 
   printf("loaded rom: %s (%ld bytes)\n", filename, rom_size);
@@ -32,68 +38,49 @@ void load_rom(const char *filename, state_t *state) {
 extern uint32_t buffer[WINDOW_W * WINDOW_H];
 extern uint8_t chip8_display[CHIP8_W * CHIP8_H];
 
-static uint8_t key_pressed = 0xFF;
-void keyboard_callback(struct mfb_window *window, mfb_key key, mfb_key_mod mod,
-                       bool is_pressed) {
-  if (is_pressed && key_pressed == 0xFF) {
-    switch (key) {
-    case KB_KEY_ESCAPE:
-      mfb_close(window);
-      break;
-    case KB_KEY_1:
-      key_pressed = 0x1;
-      break;
-    case KB_KEY_2:
-      key_pressed = 0x2;
-      break;
-    case KB_KEY_3:
-      key_pressed = 0x3;
-      break;
-    case KB_KEY_4:
-      key_pressed = 0xC;
-      break;
-    case KB_KEY_Q:
-      key_pressed = 0x4;
-      break;
-    case KB_KEY_W:
-      key_pressed = 0x5;
-      break;
-    case KB_KEY_E:
-      key_pressed = 0x6;
-      break;
-    case KB_KEY_R:
-      key_pressed = 0xD;
-      break;
-    case KB_KEY_A:
-      key_pressed = 0x7;
-      break;
-    case KB_KEY_S:
-      key_pressed = 0x8;
-      break;
-    case KB_KEY_D:
-      key_pressed = 0x9;
-      break;
-    case KB_KEY_F:
-      key_pressed = 0xE;
-      break;
-    case KB_KEY_Z:
-      key_pressed = 0xA;
-      break;
-    case KB_KEY_X:
-      key_pressed = 0x0;
-      break;
-    case KB_KEY_C:
-      key_pressed = 0xB;
-      break;
-    case KB_KEY_V:
-      key_pressed = 0xF;
-      break;
-    default:
-      break;
-    }
-  } else {
-    key_pressed = 0xFF;
+void keyboard_poll(state_t *state) {
+  mfb_update(state->input.window, buffer);
+  const uint8_t *keys = mfb_get_key_buffer(state->input.window);
+
+  if (keys[KB_KEY_ESCAPE]) {
+    mfb_close(state->input.window);
+    return;
   }
+
+  if (keys[KB_KEY_1])
+    pressed = 0x1;
+  else if (keys[KB_KEY_2])
+    pressed = 0x2;
+  else if (keys[KB_KEY_3])
+    pressed = 0x3;
+  else if (keys[KB_KEY_4])
+    pressed = 0xC;
+  else if (keys[KB_KEY_Q])
+    pressed = 0x4;
+  else if (keys[KB_KEY_W])
+    pressed = 0x5;
+  else if (keys[KB_KEY_E])
+    pressed = 0x6;
+  else if (keys[KB_KEY_R])
+    pressed = 0xD;
+  else if (keys[KB_KEY_A])
+    pressed = 0x7;
+  else if (keys[KB_KEY_S])
+    pressed = 0x8;
+  else if (keys[KB_KEY_D])
+    pressed = 0x9;
+  else if (keys[KB_KEY_F])
+    pressed = 0xE;
+  else if (keys[KB_KEY_Z])
+    pressed = 0xA;
+  else if (keys[KB_KEY_X])
+    pressed = 0x0;
+  else if (keys[KB_KEY_C])
+    pressed = 0xB;
+  else if (keys[KB_KEY_V])
+    pressed = 0xF;
+  else
+    pressed = 0xFF;
 }
 
 int main(int argc, char *argv[]) {
@@ -104,11 +91,6 @@ int main(int argc, char *argv[]) {
 
   srand((unsigned int)time(NULL));
 
-  state_t s = {.display = chip8_display, .key_pressed = &key_pressed};
-  s.pc = MEMORY_START;
-
-  load_rom(argv[1], &s);
-
   struct mfb_window *window =
       mfb_open_ex("chip8", WINDOW_W, WINDOW_H, WF_RESIZABLE);
 
@@ -117,8 +99,11 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  mfb_set_keyboard_callback(window, keyboard_callback);
+  state_t s = {.display = chip8_display,
+               .input = {0xFF, keyboard_poll, window}};
+  s.pc = MEMORY_START;
 
+  load_rom(argv[1], &s);
   // clock_t start_time, end_time = {0};
   // double frame_time = {0};
   do {

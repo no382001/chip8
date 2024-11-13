@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-g -std=gnu99 -Wall -Werror -pedantic -Wunused
+CFLAGS=-g -std=gnu99 -Wall -Werror -pedantic -Wunused -O3
 RM=rm -f
 SRC=main.c vm.c gui.c
 INC=-I/usr/include/tcl8.6 -Iminifb/include
