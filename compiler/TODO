@@ -1,0 +1,12 @@
+- `memory, var, const, auto` keywords for nonterms
+    - `auto` can decide on if its either of the prev 3
+
+- optimisations
+    - const folding
+    - peephole wherever
+    - dead code
+    - strength reduction
+    - loop unrolling, maybe?
+    - register allocation table? this is going to be the most tricky
+
+- prolog terms into ch8 binary

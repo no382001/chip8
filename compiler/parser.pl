@@ -1,10 +1,10 @@
 :- use_module(library(pio)).
 :- use_module(library(dcg/basics)).
 
-program(Program) --> statements(Program), !.
+program(Program) --> ws, statements(Program), !.
 
 statements([X|Xs]) --> statement(X), ws, statements(Xs).
-statements([]) --> [].
+statements([]) --> ws.
 
 ws --> whitespace, !, ws.
 ws --> comment, !, ws.
@@ -22,13 +22,19 @@ declaration_list([assign(Var, Expr) | Rest]) -->
 declaration_list([assign(Var, Expr)]) -->
     variable(Var), ws, "=", ws, expression(Expr), ws.
 
-statement(assign(Var, Expr)) --> variable(Var), ws, "=", ws, expression(Expr), ";", ws.
-statement(declaration(Var, Value)) --> "auto", ws, variable(Var), ws, "=", ws, expression(Value), ";", ws.
-statement(declaration_list(Declarations)) --> "auto", ws, declaration_list(Declarations), ";", ws.
+% revisit this w/ assign_op
+statement(assign(Var, Expr)) --> variable(Var), ws, "=", ws, expression(Expr), ws, ";", ws.
+statement(declaration(Var, Value)) --> keyword, ws, variable(Var), ws, "=", ws, expression(Value), ";", ws.
+statement(declaration_list(Declarations)) --> keyword, ws, declaration_list(Declarations), ";", ws.
 statement(while(Cond, Body)) --> "while", ws, "(", ws, expression(Cond), ")", ws, block(Body).
 statement(if_else(Cond, IfBody, ElseBody)) --> if_statement(Cond, IfBody), branching(ElseBody).
 statement(fundecl(Func, Args, Body)) --> function_call(Func, Args), block(Body), ws.
-statement(funcall(Func, Args)) --> function_call(Func, Args), ";", ws.
+statement(funcall(Func, Args)) --> function_call(Func, Args), ws, ";", ws.
+
+keyword --> "auto".
+keyword --> "var".
+keyword --> "const".
+keyword --> "memory".
 
 if_statement(Cond, IfBody) -->
     "if", ws , "(", ws, expression(Cond), ")", ws, block(IfBody), ws.
@@ -73,9 +79,13 @@ operator(+) --> "+".
 operator(-) --> "-".
 operator(*) --> "*".
 operator(/) --> "/".
-operator(==) --> "==".
 operator(<) --> "<".
 operator(>) --> ">".
+operator(==) --> "==".
+
+assign_operator(=) --> "=".
+assign_operator(-=) --> "-=".
+assign_operator(+=) --> "+=".
 
 variable(Var) -->
     [C], { char_type(C, alpha) },
@@ -118,7 +128,7 @@ repl :-
 
 main :-
     run_test("test 1: variable assignment",
-        "r = 5; r = 0xff;",
+        "r = 5; r = 0xff ;",
         [assign(r, num(5)), assign(r, num(255))]),
     
     run_test("test 2: variable declaration",
@@ -126,7 +136,7 @@ main :-
         [declaration(x, num(10))]),
     
     run_test("test 3: while loop",
-        "while(x < 10) { x = x + 1; }",
+        "while (x < 10) { x = x + 1; }",
         [while(binop(<, var(x), num(10)), [assign(x, binop(+, var(x), num(1)))] )]),
     
     run_test("test 4.0: if statement",
@@ -163,9 +173,13 @@ main :-
         "r = { 0x80, 0x40, 0x20, 0x10 };",
         [assign(r, [num(128), num(64), num(32), num(16)])]),
 
-    run_test("test 9: single line comment",
+    run_test("test 9.0: comment",
         "r = { 0x80, 0x40, 0x20, 0x10 }; // this is a comment",
-        [assign(r, [num(128), num(64), num(32), num(16)])]).
+        [assign(r, [num(128), num(64), num(32), num(16)])]),
+
+    run_test("test 9.1: full line comment",
+        " // this is a full line",
+        []).
 
 
 parse_file(FileName, AST) :-
