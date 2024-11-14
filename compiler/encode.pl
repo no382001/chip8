@@ -3,6 +3,14 @@
 % encode
 % ----------------------------------------------------------------
 
+encode_instruction(Base, Parts, Shifts, [HighByte, LowByte]) :-
+    foldl(shift_and_mask, Parts, Shifts, Base, Instruction),
+    HighByte is (Instruction >> 8) /\ 0xFF,
+    LowByte is Instruction /\ 0xFF.
+
+shift_and_mask(Part, Shift, Acc, Result) :-
+    Result is Acc + (Part << Shift).
+
 % clear the display (00e0)
 encode(clear_display, [0x00, 0xE0]).
 
@@ -170,16 +178,90 @@ encode(load_v0_vx(v(X)), Encoded) :-
     encode_instruction(0xF065, [X], [8], Encoded).
 
 % ----------------------------------------------------------------
-% main
+% ir
 % ----------------------------------------------------------------
 
-encode_instruction(Base, Parts, Shifts, [HighByte, LowByte]) :-
-    foldl(shift_and_mask, Parts, Shifts, Base, Instruction),
-    HighByte is (Instruction >> 8) /\ 0xFF,
-    LowByte is Instruction /\ 0xFF.
+% ir_load(+Dest, +Value, -InstrList)
+ir_load(v(X),Value,InstrList) :-
+    InstrList = [
+      set_vx_nn(v(X),nn(Value))  
+    ].
 
-shift_and_mask(Part, Shift, Acc, Result) :-
-    Result is Acc + (Part << Shift).
+ir_load(v(Dest), v(Source), InstrList) :-
+    InstrList = [
+        set_vx_vy(v(Dest), v(Source))
+    ].
+
+% ir_add(+Dest, +Value, -InstrList)
+ir_add(v(X), Value, InstrList) :-
+    InstrList = [
+        add_nn_to_vx(v(X), nn(Value))
+    ].
+    
+ir_add(v(X), v(Y), InstrList) :-
+    InstrList = [
+        vx_add_vy(v(X), v(Y))
+    ].
+
+% ir_sub(+Dest, +Source, -InstrList)
+ir_sub(v(X), v(Y), InstrList) :-
+    InstrList = [
+        vx_sub_vy(v(X), v(Y))
+    ].
+
+ir_sub(v(X), Value, InstrList) :-
+    InstrList = [
+        set_vx_nn(v(15), nn(Value)), % use VF as temp
+        vx_sub_vy(v(X), v(15))
+    ].
+
+% assign(x, binop(+, var(x), num(1)))
+%           ^^^^^^^^^^^^^^^^^^^^^^^^^
+%                       ^^^     ^^^
+% all these could be any expressions
+
+ir_translate_expr(num(Value), ResultReg, InstrList) :-
+    find_free_register(ResultReg),
+    ir_load(v(ResultReg), Value, InstrList). % why?
+
+ir_translate_expr(var(X), ResultReg, []) :-
+    ir_v_register(X, ResultReg).
+
+ir_translate_expr(binop(+, Lhs, Rhs), ResultReg, InstrList) :-
+    ir_translate_expr(Lhs, LhsReg, LhsInstr),
+    ir_translate_expr(Rhs, RhsReg, RhsInstr),
+    find_free_register(ResultReg),
+
+    ir_add(v(LhsReg), v(RhsReg), AddInstr),
+    (LhsReg = ResultReg
+        -> InstrList = AddInstr
+        ; InstrList = [set_vx_vy(v(ResultReg), v(LhsReg)) | AddInstr]),
+
+    append([LhsInstr, RhsInstr], InstrList),
+    retractall(ir_v_register(_,LhsReg)), % we dont need these anymore
+    retractall(ir_v_register(_,RhsReg)).
+
+
+:- dynamic ir_v_register/2.
+% this is used to keep track of alive variables
+find_free_register(Register) :-
+    between(0, 15, Register),
+    \+ ir_v_register(_, Register),
+    !.
+
+ir_translate_stmt(declaration(X, num(Value)), InstrList) :-
+    % variable does not exists and there is a free register
+    \+ ir_v_register(X, _), find_free_register(FreeReg),
+    assertz(ir_v_register(X,FreeReg)),
+    ir_load(v(FreeReg),Value,InstrList). % load the initial value
+
+ir_translate_stmt(assign(X, num(Value)), InstrList) :-
+    ir_v_register(X, Register), % variable is declared beforehand
+    ir_load(v(Register),Value,InstrList). % load the new value
+
+% ----------------------------------------------------------------
+% main
+% ----------------------------------------------------------------
 
 print_binary([]).
 print_binary([HighByte, LowByte | Rest]) :-

@@ -1,38 +1,23 @@
-
-
-// starting it off with a comment
 memory r = { 0x80, 0x40, 0x20, 0x10 };
-memory l = { 0x80, 0x40, 0x20, 0x10 };
-var dot = { 0x80 };
+memory l = { 0x20, 0x40, 0x80, 0x10 };
 
-add(x,y)
+main()
 {
-    x = x + y;
-}
-
-main(){
-    auto x = 3, xm = 64;
-    auto y = 3, ym = 32;
-    auto dir = 1;
-    auto A = 7, D = 9, W = 5, S = 8;
-
+    auto x = 0, xmax = 64, dx = 4;
+    auto y = 0, ymax = 32, dy = 4;
+    while(y < ymax)
+    {
+        if(1)
+        {
+            draw(x, y, r);
+        }
+        else
+        {
+            draw(x, y, l);
+        }
+    }
     while(1)
     {
-        auto a = getchar();
-        if(a == A){
-            dir = 0;
-        }
-
-        if(a == A){
-            dir = 0;
-        } else {
-            dir = 1;
-        }
-
-        if(a == A){
-            dir = 0;
-        } else if (a == B) {
-            dir = 1;
-        }
+        // Never leave main.
     }
 }

@@ -1,3 +1,5 @@
+chip8 emulator and compiler experimentation 
+
 ```
 CHIP-8 Instruction Set
 http://octo-ide.com
