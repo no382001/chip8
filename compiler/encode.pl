@@ -219,7 +219,8 @@ ir_sub(v(X), Value, InstrList) :-
         vx_sub_vy(v(X), v(15))
     ].
 
-:- dynamic ir_v_register/2, in_use/2.
+:- dynamic ir_v_register/2.
+
 find_free_register(Id, Register) :-
     ir_v_register(Id, Register).
 find_free_register(Id,Register) :-
@@ -231,29 +232,36 @@ ir_translate_expr(num(Value), ResultReg, InstrList) :-
     find_free_register(Value,ResultReg),
     ir_load(v(ResultReg), Value, InstrList).
 
+% check if variable exists
 ir_translate_expr(var(Name), ResultReg, []) :-
-    find_free_register(Name,ResultReg).
-    %ir_load(v(ResultReg), 0, InstrList). % 0 init variable
+    ir_v_register(Name, ResultReg).
+
+ir_translate_expr(var(Name), _, _) :-
+    format("variable ~w not declared before use",[Name]), fail.
     
+ir_translate_expr(declare(var(Name)), ResultReg, InstrList) :-
+    find_free_register(Name,ResultReg),
+    ir_load(v(ResultReg), 0, InstrList). % 0 init variable
+
 ir_translate_expr(binop(+, Lhs, Rhs), ResRegLhs, InstrList) :-
     ir_translate_expr(Lhs, ResRegLhs, LhsInstr),
     ir_translate_expr(Rhs, ResRegRhs, RhsInstr),
 
     ir_add(v(ResRegLhs), v(ResRegRhs), AddInstr),
-
-    (LhsInstr = [set_vx_nn(X0,X1)], % i need a better optimization strategy
-     RhsInstr = [set_vx_nn(X0,X1)] 
-        -> InstrList = [LhsInstr, AddInstr]
-        ;  InstrList = [LhsInstr, RhsInstr, AddInstr]
-    ).
+    
+    retractall(ir_v_register(_,ResRegRhs)),
+    
+    InstrList = [LhsInstr, RhsInstr, AddInstr].
 
 ir(R) :- 
     retractall(ir_v_register(_,_)),
     Ins = [
+        declare(var(name)),
         binop(+,var(name),num(2))
     ],
     maplist(ir_translate_expr, Ins, _ , Rs),
-    flatten(Rs, R).
+    flatten(Rs, R),
+    print_formatted_instructions(R).
 /*
 [   set_vx_nn(v(0), nn(0)),
     set_vx_nn(v(1), nn(2)),
@@ -263,51 +271,35 @@ ir(R) :-
 ir2(R) :- 
     retractall(ir_v_register(_,_)),
     Ins = [
+        declare(var(first)),
         binop(+,var(first),
             binop(+,num(2),num(2))),
+
+        declare(var(second)),
         binop(+,var(second),
             binop(+,num(1),num(1))),
+
         binop(+,var(first),var(second))
     ],
     maplist(ir_translate_expr, Ins, _ , Rs),
     flatten(Rs, R),
-    print(R).
+    print_formatted_instructions(R).
 
 /*
-[   set_vx_nn(v(0),nn(0)),  v0 = 0
-    set_vx_nn(v(1),nn(2)),  v1 = 2
-    set_vx_nn(v(1),nn(2)),  v1 = 2
-    vx_add_vy(v(1),v(1)),   v1 += v1
-    vx_add_vy(v(0),v(1)),   v0 += v1
-    set_vx_nn(v(2),nn(0)),  v2 = 0
-    set_vx_nn(v(3),nn(1)),  v3 = 1
-    set_vx_nn(v(3),nn(1)),  v3 = 1
-    vx_add_vy(v(3),v(3)),   v3 += v3
-    vx_add_vy(v(2),v(3)),   v2 += v3
-    set_vx_nn(v(0),nn(0)),  v0 = 0
-    set_vx_nn(v(2),nn(0)),  v2 = 0
-    vx_add_vy(v(0),v(2))    v0 += v2
+[
+   set_vx_nn(v(0),nn(0)),   0
+   set_vx_nn(v(1),nn(2)),       2
+   set_vx_nn(v(1),nn(2)),       2
+   vx_add_vy(v(1),v(1)),        4
+   vx_add_vy(v(0),v(1)),    4
+   set_vx_nn(v(1),nn(0)),       0
+   set_vx_nn(v(2),nn(1)),           1
+   set_vx_nn(v(2),nn(1)),           1
+   vx_add_vy(v(2),v(2)),            2
+   vx_add_vy(v(1),v(2)),        2
+   vx_add_vy(v(0),v(1)),    6
 ]
 
-[   set_vx_nn(v(1),nn(2)),  v1 = 2
-    set_vx_nn(v(1),nn(2)),  dup
-    vx_add_vy(v(1),v(1)),   v1 += v1
-    vx_add_vy(v(0),v(1)),   v0 += v1
-    set_vx_nn(v(3),nn(1)),  v3 = 1
-    set_vx_nn(v(3),nn(1)),  dup
-    vx_add_vy(v(3),v(3)),   v3 += v3
-    vx_add_vy(v(2),v(3)),   v2 += v3
-    vx_add_vy(v(0),v(2))    v0 += v2
-]
-
-[   set_vx_nn(v(1),nn(2)),  v1 = 2
-    vx_add_vy(v(1),v(1)),   v1 += v1
-    vx_add_vy(v(0),v(1)),   v0 += v1
-    set_vx_nn(v(3),nn(1)),  v3 = 1
-    vx_add_vy(v(3),v(3)),   v3 += 3
-    vx_add_vy(v(2),v(3)),   v2 += 3
-    vx_add_vy(v(0),v(2))    v0 += 2
-]
 */
 
 ir_translate_stmt(declaration(X, num(Value)), InstrList) :-
@@ -324,12 +316,6 @@ ir_translate_stmt(assign(X, num(Value)), InstrList) :-
 % main
 % ----------------------------------------------------------------
 
-print_binary([]).
-print_binary([HighByte, LowByte | Rest]) :-
-    format("0x~|~`0t~16R~2+ 0x~|~`0t~16R~2+\n", [HighByte, LowByte]),
-    print_binary(Rest).
-
-
 generate_binary(Binary) :-
     Program = [
         set_vx_nn(v(1), nn(10)),
@@ -339,3 +325,23 @@ generate_binary(Binary) :-
     maplist(encode, Program, EncodedList),
     flatten(EncodedList, Binary),
     print_binary(Binary).
+
+% ----------------------------------------------------------------
+% printing
+% ----------------------------------------------------------------
+
+print_binary([]).
+print_binary([HighByte, LowByte | Rest]) :-
+    format("0x~|~`0t~16R~2+ 0x~|~`0t~16R~2+\n", [HighByte, LowByte]),
+    print_binary(Rest).
+
+format_instructions(Input, Formatted) :-
+    maplist(format_instruction, Input, FormattedList),
+    atomic_list_concat(FormattedList, '\n', Formatted).
+
+format_instruction(Instr, Formatted) :-
+    format(atom(Formatted), '   ~w,', [Instr]).
+
+print_formatted_instructions(Input) :-
+    format_instructions(Input, Formatted),
+    format("[\n~w\n]", [Formatted]).
