@@ -183,6 +183,7 @@ encode(load_v0_vx(v(X)), Encoded) :-
 
 % ir_load(+Dest, +Value, -InstrList)
 ir_load(v(X),Value,InstrList) :-
+    integer(Value),
     InstrList = [
       set_vx_nn(v(X),nn(Value))  
     ].
@@ -192,12 +193,14 @@ ir_load(v(Dest), v(Source), InstrList) :-
         set_vx_vy(v(Dest), v(Source))
     ].
 
+
 % ir_add(+Dest, +Value, -InstrList)
 ir_add(v(X), Value, InstrList) :-
+    integer(Value),
     InstrList = [
-        add_nn_to_vx(v(X), nn(Value))
+    add_nn_to_vx(v(X), nn(Value))
     ].
-    
+
 ir_add(v(X), v(Y), InstrList) :-
     InstrList = [
         vx_add_vy(v(X), v(Y))
@@ -210,44 +213,102 @@ ir_sub(v(X), v(Y), InstrList) :-
     ].
 
 ir_sub(v(X), Value, InstrList) :-
+    integer(Value),
     InstrList = [
         set_vx_nn(v(15), nn(Value)), % use VF as temp
         vx_sub_vy(v(X), v(15))
     ].
 
-% assign(x, binop(+, var(x), num(1)))
-%           ^^^^^^^^^^^^^^^^^^^^^^^^^
-%                       ^^^     ^^^
-% all these could be any expressions
+:- dynamic ir_v_register/2, in_use/2.
+find_free_register(Id, Register) :-
+    ir_v_register(Id, Register).
+find_free_register(Id,Register) :-
+    between(0, 15, Register),
+    \+ ir_v_register(_,Register),
+    assertz(ir_v_register(Id,Register)). 
 
 ir_translate_expr(num(Value), ResultReg, InstrList) :-
-    find_free_register(ResultReg),
-    ir_load(v(ResultReg), Value, InstrList). % why?
+    find_free_register(Value,ResultReg),
+    ir_load(v(ResultReg), Value, InstrList).
 
-ir_translate_expr(var(X), ResultReg, []) :-
-    ir_v_register(X, ResultReg).
+ir_translate_expr(var(Name), ResultReg, []) :-
+    find_free_register(Name,ResultReg).
+    %ir_load(v(ResultReg), 0, InstrList). % 0 init variable
+    
+ir_translate_expr(binop(+, Lhs, Rhs), ResRegLhs, InstrList) :-
+    ir_translate_expr(Lhs, ResRegLhs, LhsInstr),
+    ir_translate_expr(Rhs, ResRegRhs, RhsInstr),
 
-ir_translate_expr(binop(+, Lhs, Rhs), ResultReg, InstrList) :-
-    ir_translate_expr(Lhs, LhsReg, LhsInstr),
-    ir_translate_expr(Rhs, RhsReg, RhsInstr),
-    find_free_register(ResultReg),
+    ir_add(v(ResRegLhs), v(ResRegRhs), AddInstr),
 
-    ir_add(v(LhsReg), v(RhsReg), AddInstr),
-    (LhsReg = ResultReg
-        -> InstrList = AddInstr
-        ; InstrList = [set_vx_vy(v(ResultReg), v(LhsReg)) | AddInstr]),
+    (LhsInstr = [set_vx_nn(X0,X1)], % i need a better optimization strategy
+     RhsInstr = [set_vx_nn(X0,X1)] 
+        -> InstrList = [LhsInstr, AddInstr]
+        ;  InstrList = [LhsInstr, RhsInstr, AddInstr]
+    ).
 
-    append([LhsInstr, RhsInstr], InstrList),
-    retractall(ir_v_register(_,LhsReg)), % we dont need these anymore
-    retractall(ir_v_register(_,RhsReg)).
+ir(R) :- 
+    retractall(ir_v_register(_,_)),
+    Ins = [
+        binop(+,var(name),num(2))
+    ],
+    maplist(ir_translate_expr, Ins, _ , Rs),
+    flatten(Rs, R).
+/*
+[   set_vx_nn(v(0), nn(0)),
+    set_vx_nn(v(1), nn(2)),
+    vx_add_vy(v(0), v(1))   ]
+*/
 
+ir2(R) :- 
+    retractall(ir_v_register(_,_)),
+    Ins = [
+        binop(+,var(first),
+            binop(+,num(2),num(2))),
+        binop(+,var(second),
+            binop(+,num(1),num(1))),
+        binop(+,var(first),var(second))
+    ],
+    maplist(ir_translate_expr, Ins, _ , Rs),
+    flatten(Rs, R),
+    print(R).
 
-:- dynamic ir_v_register/2.
-% this is used to keep track of alive variables
-find_free_register(Register) :-
-    between(0, 15, Register),
-    \+ ir_v_register(_, Register),
-    !.
+/*
+[   set_vx_nn(v(0),nn(0)),  v0 = 0
+    set_vx_nn(v(1),nn(2)),  v1 = 2
+    set_vx_nn(v(1),nn(2)),  v1 = 2
+    vx_add_vy(v(1),v(1)),   v1 += v1
+    vx_add_vy(v(0),v(1)),   v0 += v1
+    set_vx_nn(v(2),nn(0)),  v2 = 0
+    set_vx_nn(v(3),nn(1)),  v3 = 1
+    set_vx_nn(v(3),nn(1)),  v3 = 1
+    vx_add_vy(v(3),v(3)),   v3 += v3
+    vx_add_vy(v(2),v(3)),   v2 += v3
+    set_vx_nn(v(0),nn(0)),  v0 = 0
+    set_vx_nn(v(2),nn(0)),  v2 = 0
+    vx_add_vy(v(0),v(2))    v0 += v2
+]
+
+[   set_vx_nn(v(1),nn(2)),  v1 = 2
+    set_vx_nn(v(1),nn(2)),  dup
+    vx_add_vy(v(1),v(1)),   v1 += v1
+    vx_add_vy(v(0),v(1)),   v0 += v1
+    set_vx_nn(v(3),nn(1)),  v3 = 1
+    set_vx_nn(v(3),nn(1)),  dup
+    vx_add_vy(v(3),v(3)),   v3 += v3
+    vx_add_vy(v(2),v(3)),   v2 += v3
+    vx_add_vy(v(0),v(2))    v0 += v2
+]
+
+[   set_vx_nn(v(1),nn(2)),  v1 = 2
+    vx_add_vy(v(1),v(1)),   v1 += v1
+    vx_add_vy(v(0),v(1)),   v0 += v1
+    set_vx_nn(v(3),nn(1)),  v3 = 1
+    vx_add_vy(v(3),v(3)),   v3 += 3
+    vx_add_vy(v(2),v(3)),   v2 += 3
+    vx_add_vy(v(0),v(2))    v0 += 2
+]
+*/
 
 ir_translate_stmt(declaration(X, num(Value)), InstrList) :-
     % variable does not exists and there is a free register
@@ -267,6 +328,7 @@ print_binary([]).
 print_binary([HighByte, LowByte | Rest]) :-
     format("0x~|~`0t~16R~2+ 0x~|~`0t~16R~2+\n", [HighByte, LowByte]),
     print_binary(Rest).
+
 
 generate_binary(Binary) :-
     Program = [
