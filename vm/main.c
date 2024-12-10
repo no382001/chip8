@@ -115,6 +115,7 @@ int main(int argc, char *argv[]) {
 
     vm_cycle(&s);
     draw_chip8_display(buffer);
+    draw_debug_info(buffer, &s);
 
     // end_time = clock();
     // frame_time = ((double)(end_time - start_time) / CLOCKS_PER_SEC) *
