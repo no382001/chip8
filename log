@@ -1,0 +1,134 @@
+   Call: (10) ir3(_3630) ? creep
+^  Call: (11) retractall(ir_v_register(_4808, _4810)) ? creep
+^  Exit: (11) retractall(ir_v_register(_4808, _4810)) ? creep
+   Call: (11) _6336=[declare(var(x)), declare(var(y)), declare(label(main)), binop(+, var(x), num(1)), if_then_else(binop(==, var(x), num(5)), binop(+, var(y), num(1)), []), goto(label(main))] ? creep
+   Exit: (11) [declare(var(x)), declare(var(y)), declare(label(main)), binop(+, var(x), num(1)), if_then_else(binop(==, var(x), num(5)), binop(+, var(y), num(1)), []), goto(label(main))]=[declare(var(x)), declare(var(y)), declare(label(main)), binop(+, var(x), num(1)), if_then_else(binop(==, var(x), num(5)), binop(+, var(y), num(1)), []), goto(label(main))] ? creep
+^  Call: (11) apply:maplist(ir_translate_expr, [declare(var(x)), declare(var(y)), declare(label(main)), binop(+, var(x), num(1)), if_then_else(binop(==, var(...), num(...)), binop(+, var(...), num(...)), []), goto(label(...))], _9448, _7970) ? creep
+   Call: (12) apply:maplist_([declare(var(x)), declare(var(y)), declare(label(main)), binop(+, var(x), num(1)), if_then_else(binop(==, var(...), num(...)), binop(+, var(...), num(...)), []), goto(label(...))], _10174, _7970, user:ir_translate_expr) ? creep
+   Call: (13) ir_translate_expr(declare(var(x)), _10952, _10958) ? creep
+   Call: (14) find_free_register(x, _10952) ? creep
+   Call: (15) ir_v_register(x, _10952) ? creep
+   Fail: (15) ir_v_register(x, _10952) ? creep
+   Redo: (14) find_free_register(x, _10952) ? creep
+   Call: (15) between(0, 15, _10952) ? creep
+   Exit: (15) between(0, 15, 0) ? creep
+   Call: (15) ir_v_register(_16308, 0) ? creep
+   Fail: (15) ir_v_register(_17062, 0) ? creep
+   Redo: (14) find_free_register(x, 0) ? creep
+^  Call: (15) assertz(ir_v_register(x, 0)) ? creep
+^  Exit: (15) assertz(ir_v_register(x, 0)) ? creep
+   Exit: (14) find_free_register(x, 0) ? creep
+   Call: (14) ir_load(v(0), 0, _10958) ? creep
+   Call: (15) _10958=[set_vx_nn(v(0), nn(0))] ? creep
+   Exit: (15) [set_vx_nn(v(0), nn(0))]=[set_vx_nn(v(0), nn(0))] ? creep
+   Exit: (14) ir_load(v(0), 0, [set_vx_nn(v(0), nn(0))]) ? creep
+   Exit: (13) ir_translate_expr(declare(var(x)), 0, [set_vx_nn(v(0), nn(0))]) ? creep
+   Call: (13) apply:maplist_([declare(var(y)), declare(label(main)), binop(+, var(x), num(1)), if_then_else(binop(==, var(x), num(5)), binop(+, var(y), num(1)), []), goto(label(main))], _10954, _10960, user:ir_translate_expr) ? creep
+   Call: (14) ir_translate_expr(declare(var(y)), _25380, _25386) ? creep
+   Call: (15) find_free_register(y, _25380) ? creep
+   Call: (16) ir_v_register(y, _25380) ? creep
+   Fail: (16) ir_v_register(y, _25380) ? creep
+   Redo: (15) find_free_register(y, _25380) ? creep
+   Call: (16) between(0, 15, _25380) ? creep
+   Exit: (16) between(0, 15, 0) ? creep
+   Call: (16) ir_v_register(_30736, 0) ? creep
+   Exit: (16) ir_v_register(x, 0) ? creep
+   Redo: (16) between(0, 15, _244) ? creep
+   Exit: (16) between(0, 15, 1) ? creep
+   Call: (16) ir_v_register(_1558, 1) ? creep
+   Fail: (16) ir_v_register(_2312, 1) ? creep
+   Redo: (15) find_free_register(y, 1) ? creep
+^  Call: (16) assertz(ir_v_register(y, 1)) ? creep
+^  Exit: (16) assertz(ir_v_register(y, 1)) ? creep
+   Exit: (15) find_free_register(y, 1) ? creep
+   Call: (15) ir_load(v(1), 0, _250) ? creep
+   Call: (16) _250=[set_vx_nn(v(1), nn(0))] ? creep
+   Exit: (16) [set_vx_nn(v(1), nn(0))]=[set_vx_nn(v(1), nn(0))] ? creep
+   Exit: (15) ir_load(v(1), 0, [set_vx_nn(v(1), nn(0))]) ? creep
+   Exit: (14) ir_translate_expr(declare(var(y)), 1, [set_vx_nn(v(1), nn(0))]) ? creep
+   Call: (14) apply:maplist_([declare(label(main)), binop(+, var(x), num(1)), if_then_else(binop(==, var(x), num(5)), binop(+, var(y), num(1)), []), goto(label(main))], _246, _252, user:ir_translate_expr) ? creep
+   Call: (15) ir_translate_expr(declare(label(main)), _10630, _10636) ? creep
+   Exit: (15) ir_translate_expr(declare(label(main)), _10630, [label(main)]) ? creep
+   Call: (15) apply:maplist_([binop(+, var(x), num(1)), if_then_else(binop(==, var(x), num(5)), binop(+, var(y), num(1)), []), goto(label(main))], _10632, _10638, user:ir_translate_expr) ? creep
+   Call: (16) ir_translate_expr(binop(+, var(x), num(1)), _12942, _12948) ? creep
+   Call: (17) ir_translate_expr(var(x), _12942, _13710) ? creep
+   Call: (18) ir_v_register(x, _12942) ? creep
+   Exit: (18) ir_v_register(x, 0) ? creep
+   Exit: (17) ir_translate_expr(var(x), 0, []) ? creep
+   Call: (17) ir_translate_expr(num(1), _16736, _16738) ? creep
+   Call: (18) find_free_register(1, _16736) ? creep
+   Call: (19) ir_v_register(1, _16736) ? creep
+   Fail: (19) ir_v_register(1, _16736) ? creep
+   Redo: (18) find_free_register(1, _16736) ? creep
+   Call: (19) between(0, 15, _16736) ? creep
+   Exit: (19) between(0, 15, 0) ? creep
+   Call: (19) ir_v_register(_22086, 0) ? creep
+   Exit: (19) ir_v_register(x, 0) ? creep
+   Redo: (19) between(0, 15, _16736) ? creep
+   Exit: (19) between(0, 15, 1) ? creep
+   Call: (19) ir_v_register(_25110, 1) ? creep
+   Exit: (19) ir_v_register(y, 1) ? creep
+   Redo: (19) between(0, 15, _16736) ? creep
+   Exit: (19) between(0, 15, 2) ? creep
+   Call: (19) ir_v_register(_28134, 2) ? creep
+   Fail: (19) ir_v_register(_28888, 2) ? creep
+   Redo: (18) find_free_register(1, 2) ? creep
+^  Call: (19) assertz(ir_v_register(1, 2)) ? creep
+^  Exit: (19) assertz(ir_v_register(1, 2)) ? creep
+   Exit: (18) find_free_register(1, 2) ? creep
+   Call: (18) ir_load(v(2), 1, _316) ? creep
+   Call: (19) _316=[set_vx_nn(v(2), nn(1))] ? creep
+   Exit: (19) [set_vx_nn(v(2), nn(1))]=[set_vx_nn(v(2), nn(1))] ? creep
+   Exit: (18) ir_load(v(2), 1, [set_vx_nn(v(2), nn(1))]) ? creep
+   Exit: (17) ir_translate_expr(num(1), 2, [set_vx_nn(v(2), nn(1))]) ? creep
+   Call: (17) ir_add(v(0), v(2), _4134) ? creep
+   Exit: (17) ir_add(v(0), v(2), [vx_add_vy(v(0), v(2))]) ? creep
+^  Call: (17) retractall(ir_v_register(_5674, 2)) ? creep
+^  Exit: (17) retractall(ir_v_register(_5674, 2)) ? creep
+   Call: (17) _308=[[], [set_vx_nn(v(2), nn(1))], [vx_add_vy(v(0), v(2))]] ? creep
+   Exit: (17) [[], [set_vx_nn(v(2), nn(1))], [vx_add_vy(v(0), v(2))]]=[[], [set_vx_nn(v(2), nn(1))], [vx_add_vy(v(0), v(2))]] ? creep
+   Exit: (16) ir_translate_expr(binop(+, var(x), num(1)), 0, [[], [set_vx_nn(v(2), nn(1))], [vx_add_vy(v(0), v(2))]]) ? creep
+   Call: (16) apply:maplist_([if_then_else(binop(==, var(x), num(5)), binop(+, var(y), num(1)), []), goto(label(main))], _304, _310, user:ir_translate_expr) ? creep
+   Call: (17) ir_translate_expr(if_then_else(binop(==, var(x), num(5)), binop(+, var(y), num(1)), []), _10262, _10268) ? creep
+   Call: (18) ir_translate_expr(binop(==, var(x), num(5)), _11030, _11032) ? creep
+   Call: (19) ir_translate_expr(var(x), _11030, _11792) ? creep
+   Call: (20) ir_v_register(x, _11030) ? creep
+   Exit: (20) ir_v_register(x, 0) ? creep
+   Exit: (19) ir_translate_expr(var(x), 0, []) ? creep
+   Call: (19) ir_eq(v(0), 5, _14822) ? creep
+   Fail: (19) ir_eq(v(0), 5, _14822) ? creep
+   Redo: (19) ir_translate_expr(var(x), _11030, _11792) ? creep
+^  Call: (20) format("variable ~w not declared before use", [x]) ? creep
+variable x not declared before use
+^  Exit: (20) format("variable ~w not declared before use", [x]) ? creep
+   Call: (20) fail ? creep
+   Fail: (20) fail ? creep
+   Fail: (19) ir_translate_expr(var(x), _11030, _11792) ? creep
+   Redo: (18) ir_translate_expr(binop(==, var(x), num(5)), _11030, _11032) ? creep
+   Call: (19) ir_translate_expr(var(x), _11030, _21650) ? creep
+   Call: (20) ir_v_register(x, _11030) ? creep
+   Exit: (20) ir_v_register(x, 0) ? creep
+   Exit: (19) ir_translate_expr(var(x), 0, []) ? creep
+   Call: (19) ir_translate_expr(num(5), _24676, _24678) ? creep
+   Call: (20) find_free_register(5, _24676) ? creep
+   Call: (21) ir_v_register(5, _24676) ? creep
+   Fail: (21) ir_v_register(5, _24676) ? creep
+   Redo: (20) find_free_register(5, _24676) ? creep
+   Call: (21) between(0, 15, _24676) ? creep
+   Exit: (21) between(0, 15, 0) ? creep
+   Call: (21) ir_v_register(_30026, 0) ? creep
+   Exit: (21) ir_v_register(x, 0) ? creep
+   Redo: (21) between(0, 15, _24676) ? creep
+   Exit: (21) between(0, 15, 1) ? creep
+   Call: (21) ir_v_register(_974, 1) ? creep
+   Exit: (21) ir_v_register(y, 1) ? creep
+   Redo: (21) between(0, 15, _398) ? creep
+   Exit: (21) between(0, 15, 2) ? creep
+   Call: (21) ir_v_register(_3998, 2) ? creep
+   Fail: (21) ir_v_register(_4752, 2) ? creep
+   Redo: (20) find_free_register(5, 2) ? creep
+^  Call: (21) assertz(ir_v_register(5, 2)) ? creep
+^  Exit: (21) assertz(ir_v_register(5, 2)) ? creep
+   Exit: (20) find_free_register(5, 2) ? creep
+   Call: (20) ir_load(v(2), 5, _400) ? creep
+   Call: (21) _400=[set_vx_nn(v(2), nn(5))] ? 

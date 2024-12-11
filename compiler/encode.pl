@@ -219,6 +219,25 @@ ir_sub(v(X), Value, InstrList) :-
         vx_sub_vy(v(X), v(15))
     ].
 
+ir_eq(v(X), nn(Value), InstrList) :-
+    gensym('ir_eq_label_', Label),
+    InstrList = [
+        set_vx_nn(v(15), nn(Value)), % change this later
+        skip_if_vx_eq_vy(v(X), v(15)),
+        set_vx_nn(v(15), nn(0)),
+        goto(label(Label)),
+        set_vx_nn(v(15), nn(1)),
+        declare(label(Label))
+    ].
+
+ir_eq(v(X), v(Y), InstrList) :-
+    InstrList = [
+        set_vx_nn(v(15), nn(0)), % change this later
+        skip_if_vx_eq_vy(v(X), v(Y)),
+        set_vx_nn(v(15), nn(1))
+    ].
+
+
 :- dynamic ir_v_register/2.
 
 find_free_register(Id, Register) :-
@@ -253,6 +272,46 @@ ir_translate_expr(binop(+, Lhs, Rhs), ResRegLhs, InstrList) :-
     
     InstrList = [LhsInstr, RhsInstr, AddInstr].
 
+ir_translate_expr(binop(==, Lhs, num(N)), ResRegLhs, InstrList) :-
+    ir_translate_expr(Lhs, ResRegLhs, LhsInstr),
+    ir_eq(v(ResRegLhs), N, EqInstr),
+    InstrList = [LhsInstr, EqInstr].
+
+ir_translate_expr(binop(==, Lhs, Rhs), ResRegLhs, InstrList) :-
+    ir_translate_expr(Lhs, ResRegLhs, LhsInstr),
+    ir_translate_expr(Rhs, ResRegRhs, RhsInstr),
+
+    ir_eq(v(ResRegLhs), v(ResRegRhs), EqInstr), % im skipping the non var cmp
+    
+    retractall(ir_v_register(_,ResRegRhs)),
+    
+    InstrList = [LhsInstr, RhsInstr, EqInstr].
+
+
+ir_translate_expr(if_then_else(Condition, Then, Else), ResRegLhs, InstrList) :-
+    ir_translate_expr(Condition, ResRegCond, CondInstr),
+
+    gensym('if_then_else_label1_', Label1),
+    gensym('if_then_else_label2_', Label2),
+    CondCheckInstr = [
+        skip_if_vx_eq_vy(v(ResRegCond), v(15)),
+        goto(label(Label1)),
+        % then
+        ThenInstr,
+        goto(label(Label2)),
+        declare(label(Label1)),
+        % else
+        ElseInstr,
+        declare(label(Label2))
+    ],
+    retractall(ir_v_register(_,ResRegCond)), % uhhm?
+
+    ir_translate_expr(Then, ResRegLhs, ThenInstr),
+    ir_translate_expr(Else, ResRegRhs, ElseInstr),
+
+    retractall(ir_v_register(_,ResRegRhs)),
+    
+    InstrList = [CondInstr, CondCheckInstr].
 
 ir_translate_expr(declare(label(Name)), _, [label(Name)]).
 ir_translate_expr(goto(label(Name)), _, [goto(label(Name))]).
@@ -303,6 +362,25 @@ ir2(ResolvedInstr) :-
             binop(+,num(1),num(1))),
 
         binop(+,var(first),var(second)),
+        goto(label('main'))
+    ], !,
+    maplist(ir_translate_expr, Ins, _ , Rs),
+    flatten(Rs, R0),
+    collect_labels(R0, LabelMap, R1),
+    resolve_gotos(R1, LabelMap, ResolvedInstr),
+    print_formatted_instructions(ResolvedInstr).
+
+ir3(ResolvedInstr) :- 
+    retractall(ir_v_register(_,_)),
+    Ins = [
+        declare(var(x)),
+        declare(var(y)),
+        declare(label('main')),
+        binop(+,var(x), num(1)), % after binop we lose the register it seems
+        if_then_else(
+            binop(==, var(x), num(5)),
+            binop(+, var(y), num(1)),
+            []),
         goto(label('main'))
     ], !,
     maplist(ir_translate_expr, Ins, _ , Rs),
