@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-g -std=gnu99 -Wall -Werror -pedantic -Wunused -O3 -Wno-error=unused-function
+CFLAGS=-g -std=gnu99 -Wall -Werror -pedantic -Wunused -O3 -Wno-error=unused-function -Wno-error=comment
 RM=rm -f
 SRC=main.c vm.c gui.c
 INC=-I/usr/include/tcl8.6 -Iminifb/include

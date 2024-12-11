@@ -119,8 +119,8 @@ void add_nn_to_vx(state_t *state) {
 
 void unknown_instruction(state_t *state) {
   printf("-> unknown_instruction 0x%04X (opcode 0x%01X, n "
-         "0x%02X)\n",
-         instruction, opcode, n);
+         "0x%02X, pc: 0x%02X)\n",
+         instruction, opcode, n, state->pc - 2);
   exit(1);
 }
 
@@ -221,8 +221,7 @@ void kp_skip_if_not_vx(state_t *state) {
     state->pc += 2;
     printf("V[%X] (0x%02X) skipping\n", vx, state->V[vx]);
   } else {
-    printf("V[%X] (0x%02X) not skipping\n", vx,
-           state->V[vx]);
+    printf("V[%X] (0x%02X) not skipping\n", vx, state->V[vx]);
   }
 }
 

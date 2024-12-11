@@ -330,7 +330,7 @@ void draw_debug_info(uint32_t *buffer, state_t *s) {
   info_y -= 20 * 8;
   info_x += 140;
   for (int i = 0; i < 16 / 2; i++) {
-    snprintf(buf, sizeof(buf), "V%X: %02X", i + 8, s->V[i]);
+    snprintf(buf, sizeof(buf), "V%X: %02X", i + 8, s->V[i + 8]);
     draw_string(buffer, info_x + display_offset_x,
                 info_y + display_offset_y + display_height, buf, 0xFFFFFFFF,
                 0x00000000);

@@ -1,7 +1,8 @@
 #include "MiniFB.h"
 #include "gui.h"
-#include "time.h"
 #include "vm.h"
+#include <time.h>
+#include <unistd.h>
 
 #define MEMORY_START 0x200
 #define MEMORY_SIZE 4096
@@ -33,6 +34,20 @@ void load_rom(const char *filename, state_t *state) {
   fclose(rom);
 
   printf("loaded rom: %s (%ld bytes)\n", filename, rom_size);
+
+  /** /
+  unsigned start_addr = MEMORY_START;
+  for (int i = 0; i < rom_size; i += 2) {
+    unsigned addr = start_addr + i;
+    uint8_t high = state->memory[addr];
+    uint8_t low = 0x00;
+    if (i + 1 < rom_size) {
+      low = state->memory[addr + 1];
+    }
+
+    printf("0x%03X: 0x%02X 0x%02X\n", addr, high, low);
+  }
+  /**/
 }
 
 extern uint32_t buffer[WINDOW_W * WINDOW_H];
@@ -83,9 +98,39 @@ void keyboard_poll(state_t *state) {
     pressed = 0xFF;
 }
 
+static bool step = false;
+#define PRINT_USAGE                                                            \
+  { fprintf(stderr, "Usage: %s [-s] -r <rom file>\n", argv[0]); }
+
 int main(int argc, char *argv[]) {
-  if (argc < 2) {
-    fprintf(stderr, "usage: %s <rom file>\n", argv[0]);
+  if (argc < 3) {
+    PRINT_USAGE
+    return 1;
+  }
+
+  const char *rom_file = NULL;
+
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "-s") == 0) {
+      step = true;
+    } else if (strcmp(argv[i], "-r") == 0) {
+      if (i + 1 < argc) {
+        rom_file = argv[i + 1];
+        i++;
+      } else {
+        fprintf(stderr, "error: -r option requires an argument\n");
+        return 1;
+      }
+    } else {
+      fprintf(stderr, "unknown argument: %s\n", argv[i]);
+      PRINT_USAGE
+      return 1;
+    }
+  }
+
+  if (rom_file == NULL) {
+    fprintf(stderr, "rrror: no ROM file specified\n");
+    PRINT_USAGE
     return 1;
   }
 
@@ -103,12 +148,9 @@ int main(int argc, char *argv[]) {
                .input = {0xFF, keyboard_poll, window}};
   s.pc = MEMORY_START;
 
-  load_rom(argv[1], &s);
-  // clock_t start_time, end_time = {0};
-  // double frame_time = {0};
-  do {
-    // start_time = clock();
+  load_rom(rom_file, &s);
 
+  do {
     mfb_update_state state = mfb_update(window, buffer);
     if (state != STATE_OK)
       break;
@@ -117,11 +159,27 @@ int main(int argc, char *argv[]) {
     draw_chip8_display(buffer);
     draw_debug_info(buffer, &s);
 
-    // end_time = clock();
-    // frame_time = ((double)(end_time - start_time) / CLOCKS_PER_SEC) *
-    // 1000.0; printf("frame time: %.2f ms\n", frame_time);
+    if (step) {
 
-  } while (1 /*mfb_wait_sync(window)*/);
+      bool key_pressed = false;
+      while (!key_pressed) {
+        usleep(100000);
+        mfb_update_state step_state = mfb_update(window, buffer);
+        if (step_state != STATE_OK)
+          break;
+
+        const uint8_t *keys = mfb_get_key_buffer(window);
+        if (keys) {
+          for (int k = 0; k < KB_KEY_LAST; k++) {
+            if (keys[k]) {
+              key_pressed = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+  } while (1);
 
   return 0;
 }

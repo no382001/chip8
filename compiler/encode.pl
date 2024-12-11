@@ -316,15 +316,31 @@ ir_translate_stmt(assign(X, num(Value)), InstrList) :-
 % main
 % ----------------------------------------------------------------
 
-generate_binary(Binary) :-
-    Program = [
-        set_vx_nn(v(1), nn(10)),
-        set_index_register(nnn(0x300)),
-        jump_to_address(nnn(0x200))
-    ],
+generate_binary :-
+    ir2(Program0),
+    append(Program0, [jump_to_address(nnn(0x200))], Program),
     maplist(encode, Program, EncodedList),
     flatten(EncodedList, Binary),
-    print_binary(Binary).
+    export_binary("programs/test.ch8",Binary).
+
+
+write_padding(_, 0).
+write_padding(Stream, N) :-
+    N > 0,
+    put_byte(Stream, 0),
+    N1 is N - 1,
+    write_padding(Stream, N1).
+
+write_all(_, []).
+write_all(Stream, [Byte | Rest]) :-
+    put_byte(Stream, Byte),
+    write_all(Stream, Rest).
+
+export_binary(Filename, Binary) :-
+    open(Filename, write, Stream, [type(binary)]),
+    %write_padding(Stream, 0x200),   % pad 512 bytes of zero
+    write_all(Stream, Binary),
+    close(Stream).
 
 % ----------------------------------------------------------------
 % printing
