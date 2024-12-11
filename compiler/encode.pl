@@ -188,6 +188,8 @@ ir_load(v(X),Value,InstrList) :-
       set_vx_nn(v(X),nn(Value))  
     ].
 
+ir_load(v(Source), v(Source), []).
+
 ir_load(v(Dest), v(Source), InstrList) :-
     InstrList = [
         set_vx_vy(v(Dest), v(Source))
@@ -219,6 +221,25 @@ ir_sub(v(X), Value, InstrList) :-
         vx_sub_vy(v(X), v(15))
     ].
 
+ir_eq(v(X), nn(Value), InstrList) :-
+    gensym('ir_eq_label_', Label),
+    InstrList = [
+        set_vx_nn(v(15), nn(Value)), % change this later
+        skip_if_vx_eq_vy(v(X), v(15)),
+        set_vx_nn(v(15), nn(0)),
+        goto(label(Label)),
+        set_vx_nn(v(15), nn(1)),
+        declare(label(Label))
+    ].
+
+ir_eq(v(X), v(Y), InstrList) :-
+    InstrList = [
+        set_vx_nn(v(15), nn(0)), % change this later
+        skip_if_vx_eq_vy(v(X), v(Y)),
+        set_vx_nn(v(15), nn(1))
+    ].
+
+
 :- dynamic ir_v_register/2.
 
 find_free_register(Id, Register) :-
@@ -236,12 +257,16 @@ ir_translate_expr(num(Value), ResultReg, InstrList) :-
 ir_translate_expr(var(Name), ResultReg, []) :-
     ir_v_register(Name, ResultReg).
 
-ir_translate_expr(var(Name), _, _) :-
-    format("variable ~w not declared before use",[Name]), fail.
-    
 ir_translate_expr(declare(var(Name)), ResultReg, InstrList) :-
     find_free_register(Name,ResultReg),
     ir_load(v(ResultReg), 0, InstrList). % 0 init variable
+
+ir_translate_expr(assign(var(Name),Rhs), _, InstrList) :-
+    ir_v_register(Name, VarAddress),
+    ir_translate_expr(Rhs, ResRegRhs, RhsInstr),
+    ir_load(v(VarAddress),v(ResRegRhs),LoadInstr),
+    % retractall(ir_v_register(_,ResRegRhs)), % how do i handle this? check if its a used var?
+    InstrList = [RhsInstr, LoadInstr].
 
 ir_translate_expr(binop(+, Lhs, Rhs), ResRegLhs, InstrList) :-
     ir_translate_expr(Lhs, ResRegLhs, LhsInstr),
@@ -253,44 +278,93 @@ ir_translate_expr(binop(+, Lhs, Rhs), ResRegLhs, InstrList) :-
     
     InstrList = [LhsInstr, RhsInstr, AddInstr].
 
+ir_translate_expr(binop(==, Lhs, num(N)), ResRegLhs, InstrList) :-
+    ir_translate_expr(Lhs, ResRegLhs, LhsInstr),
+    ir_eq(v(ResRegLhs), N, EqInstr),
+    InstrList = [LhsInstr, EqInstr].
+
+ir_translate_expr(binop(==, Lhs, Rhs), ResRegLhs, InstrList) :-
+    ir_translate_expr(Lhs, ResRegLhs, LhsInstr),
+    ir_translate_expr(Rhs, ResRegRhs, RhsInstr),
+
+    ir_eq(v(ResRegLhs), v(ResRegRhs), EqInstr), % im skipping the non var cmp
+    
+    retractall(ir_v_register(_,ResRegRhs)),
+    
+    InstrList = [LhsInstr, RhsInstr, EqInstr].
+
+
+ir_translate_expr(if_then_else(Condition, Then, Else), ResRegLhs, InstrList) :-
+    ir_translate_expr(Condition, ResRegCond, CondInstr),
+
+    ir_translate_expr(Then, ResRegLhs, ThenInstr),
+    ir_translate_expr(Else, ResRegRhs, ElseInstr),
+    gensym('if_then_else_label1_', Label1),
+    
+    (Else = []
+        ->  InstrList = [
+            CondInstr,
+            skip_if_vx_eq_vy(v(ResRegCond), v(15)),
+            goto(label(Label1)),
+            ThenInstr,
+            label(Label1)
+        ]
+        ;   retractall(ir_v_register(_,ResRegRhs)),
+    
+            gensym('if_then_else_label2_', Label2),
+            CondCheckInstr = [
+                skip_if_vx_eq_vy(v(ResRegCond), v(15)),
+                goto(label(Label1)),
+                ThenInstr,
+                goto(label(Label2)),
+                label(Label1),
+                ElseInstr,
+                label(Label2)
+            ],
+            %retractall(ir_v_register(_,ResRegCond)), % uhhm?
+            InstrList = [CondInstr, CondCheckInstr]
+    ).
 
 ir_translate_expr(declare(label(Name)), _, [label(Name)]).
 ir_translate_expr(goto(label(Name)), _, [goto(label(Name))]).
-
-ir(R) :- 
-    retractall(ir_v_register(_,_)),
-    Ins = [
-        declare(var(name)),
-        binop(+,var(name),num(2))
-    ],
-    maplist(ir_translate_expr, Ins, _ , Rs),
-    flatten(Rs, R),
-    print_formatted_instructions(R).
-/*
-[   set_vx_nn(v(0), nn(0)),
-    set_vx_nn(v(1), nn(2)),
-    vx_add_vy(v(0), v(1))   ]
-*/
-
+ir_translate_expr([], _, []) :- !.
 
 collect_labels(Instr0, Labels, InstrRes) :-
-    findall((Name, Address), (
+    findall((Name, AdjustedIndex), (
         nth0(Index, Instr0, label(Name)),
-        Address is 0x200 + Index * 2  % calculate address based on position
+        count_labels_before(Instr0, Index, Count),
+        % adjust it by the already processed label count
+        % this should sufficiently handle the index-physical address offsets
+        AdjustedIndex is Index - Count
     ), Labels),
 
     exclude(is_label, Instr0, InstrRes).
 
 is_label(label(_)).
 
+count_labels_before(InstrList, Index, Count) :-
+    findall(_, (
+        nth0(I, InstrList, Instr),
+        I < Index,
+        is_label(Instr)
+    ), LabelsBefore),
+    length(LabelsBefore, Count).
+
 resolve_gotos(Instr0, Labels, ResolvedInstr) :-
     maplist(resolve_goto(Labels), Instr0, ResolvedInstr).
 
-resolve_goto(Labels, goto(label(Name)), jump_to_address(nnn(Address))) :-
-    member((Name, Address), Labels).
+resolve_goto(Labels, goto(label(Name)), goto(index(Address))) :-
+    member((Name, Address), Labels). % still using the list index
 resolve_goto(_, Instr, Instr).  % leave other instructions unchanged
 
-ir2(ResolvedInstr) :- 
+resolve_jump_addresses(InstrList, ResolvedInstrList) :-
+    maplist(resolve_goto_instruction, InstrList, ResolvedInstrList).
+
+resolve_goto_instruction(goto(index(LineNum)), jump_to_address(nnn(ResolvedAddr))) :-
+    ResolvedAddr is 0x200 + LineNum * 2 , !.
+resolve_goto_instruction(Instr, Instr).
+
+ir2(ResolvedInstr) :-  % this is not a valid program btw
     retractall(ir_v_register(_,_)),
     Ins = [
         declare(label('main')),
@@ -307,8 +381,29 @@ ir2(ResolvedInstr) :-
     ], !,
     maplist(ir_translate_expr, Ins, _ , Rs),
     flatten(Rs, R0),
-    collect_labels(R0, LabelMap, R1),
+    collect_labels(R0, LabelMap, R1), % this fuck is misaligned
     resolve_gotos(R1, LabelMap, ResolvedInstr),
+
+    print_formatted_instructions(ResolvedInstr).
+
+ir3(ResolvedInstr) :- 
+    retractall(ir_v_register(_,_)),
+    Ins = [
+        declare(var(x)),
+        declare(var(y)),
+        declare(label('main')),
+        assign(var(x),binop(+,var(x), num(1))),
+        if_then_else( % something wrong with the implementation
+            binop(==, var(x), num(5)),
+            assign(var(y),binop(+, var(y), num(1))),
+            []),
+        goto(label('main'))
+    ], !,
+    maplist(ir_translate_expr, Ins, _ , Rs),
+    flatten(Rs, R0),
+    collect_labels(R0, LabelMap, R1),
+    resolve_gotos(R1, LabelMap, R2),
+    resolve_jump_addresses(R2,ResolvedInstr),
     print_formatted_instructions(ResolvedInstr).
 
 ir_translate_stmt(declaration(X, num(Value)), InstrList) :-
@@ -326,7 +421,7 @@ ir_translate_stmt(assign(X, num(Value)), InstrList) :-
 % ----------------------------------------------------------------
 
 generate_binary :-
-    ir2(Program0),
+    ir3(Program0),
     maplist(encode, Program0, EncodedList),
     flatten(EncodedList, Binary),
     export_binary("programs/test.ch8",Binary).
@@ -367,5 +462,34 @@ format_instruction(Instr, Formatted) :-
     format(atom(Formatted), '   ~w,', [Instr]).
 
 print_formatted_instructions(Input) :-
-    format_instructions(Input, Formatted),
+    format_instructions_with_hex_line_numbers(Input, Formatted),
     format("[\n~w\n]", [Formatted]).
+
+format_instructions_with_hex_line_numbers(Instructions, Formatted) :-
+    numbered_instruction_with_hex(Instructions, 0x200, NumberedInstructions),
+    atomic_list_concat(NumberedInstructions, '\n', Formatted).
+
+numbered_instruction_with_hex([], _, []).
+numbered_instruction_with_hex([Instr | Rest], Addr, [Formatted | FormattedRest]) :-
+    format_instruction_with_hex(Instr, FormattedInstr),
+    format(atom(Formatted), '0x~|~`0t~16R~4+ ~w', [Addr, FormattedInstr]),
+    NextAddr is Addr + 2,
+    numbered_instruction_with_hex(Rest, NextAddr, FormattedRest).
+
+format_instruction_with_hex(Instruction, Formatted) :-
+    Instruction =.. [Functor | Args], % decompose the term
+    maplist(format_argument_hex, Args, HexArgs), % format each argument
+    atomic_list_concat(HexArgs, ', ', JoinedArgs), % join arguments into a single string
+    format(atom(Formatted), '~w(~w)', [Functor, JoinedArgs]). % combine functor and arguments into one string
+
+format_argument_hex(Arg, Formatted) :-
+    ( integer(Arg) ->
+        % format integer as hex
+        format(atom(Formatted), '0x~|~`0t~16R~2+', [Arg])
+    ; Arg =.. [Functor | SubArgs], % handle compound terms like v(0)
+        maplist(format_argument_hex, SubArgs, HexSubArgs), % recursively format sub-arguments
+        atomic_list_concat(HexSubArgs, ',', JoinedSubArgs), % join sub-arguments
+        format(atom(Formatted), '~w(~w)', [Functor, JoinedSubArgs])
+    ; % handle other terms as strings
+        format(atom(Formatted), '~w', [Arg])
+    ).

@@ -1,5 +1,3 @@
-- `memory, var, const, auto` keywords for nonterms
-    - `auto` can decide on if its either of the prev 3
 
 - optimisations
     - const folding
@@ -10,3 +8,4 @@
     - register allocation table? this is going to be the most tricky
 
 - prolog terms into ch8 binary
+- cut more
