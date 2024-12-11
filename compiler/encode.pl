@@ -253,6 +253,10 @@ ir_translate_expr(binop(+, Lhs, Rhs), ResRegLhs, InstrList) :-
     
     InstrList = [LhsInstr, RhsInstr, AddInstr].
 
+
+ir_translate_expr(declare(label(Name)), _, [label(Name)]).
+ir_translate_expr(goto(label(Name)), _, [goto(label(Name))]).
+
 ir(R) :- 
     retractall(ir_v_register(_,_)),
     Ins = [
@@ -268,9 +272,28 @@ ir(R) :-
     vx_add_vy(v(0), v(1))   ]
 */
 
-ir2(R) :- 
+
+collect_labels(Instr0, Labels, InstrRes) :-
+    findall((Name, Address), (
+        nth0(Index, Instr0, label(Name)),
+        Address is 0x200 + Index * 2  % calculate address based on position
+    ), Labels),
+
+    exclude(is_label, Instr0, InstrRes).
+
+is_label(label(_)).
+
+resolve_gotos(Instr0, Labels, ResolvedInstr) :-
+    maplist(resolve_goto(Labels), Instr0, ResolvedInstr).
+
+resolve_goto(Labels, goto(label(Name)), jump_to_address(nnn(Address))) :-
+    member((Name, Address), Labels).
+resolve_goto(_, Instr, Instr).  % leave other instructions unchanged
+
+ir2(ResolvedInstr) :- 
     retractall(ir_v_register(_,_)),
     Ins = [
+        declare(label('main')),
         declare(var(first)),
         binop(+,var(first),
             binop(+,num(2),num(2))),
@@ -279,28 +302,14 @@ ir2(R) :-
         binop(+,var(second),
             binop(+,num(1),num(1))),
 
-        binop(+,var(first),var(second))
-    ],
+        binop(+,var(first),var(second)),
+        goto(label('main'))
+    ], !,
     maplist(ir_translate_expr, Ins, _ , Rs),
-    flatten(Rs, R),
-    print_formatted_instructions(R).
-
-/*
-[
-   set_vx_nn(v(0),nn(0)),   0
-   set_vx_nn(v(1),nn(2)),       2
-   set_vx_nn(v(1),nn(2)),       2
-   vx_add_vy(v(1),v(1)),        4
-   vx_add_vy(v(0),v(1)),    4
-   set_vx_nn(v(1),nn(0)),       0
-   set_vx_nn(v(2),nn(1)),           1
-   set_vx_nn(v(2),nn(1)),           1
-   vx_add_vy(v(2),v(2)),            2
-   vx_add_vy(v(1),v(2)),        2
-   vx_add_vy(v(0),v(1)),    6
-]
-
-*/
+    flatten(Rs, R0),
+    collect_labels(R0, LabelMap, R1),
+    resolve_gotos(R1, LabelMap, ResolvedInstr),
+    print_formatted_instructions(ResolvedInstr).
 
 ir_translate_stmt(declaration(X, num(Value)), InstrList) :-
     % variable does not exists and there is a free register
@@ -318,8 +327,7 @@ ir_translate_stmt(assign(X, num(Value)), InstrList) :-
 
 generate_binary :-
     ir2(Program0),
-    append(Program0, [jump_to_address(nnn(0x200))], Program),
-    maplist(encode, Program, EncodedList),
+    maplist(encode, Program0, EncodedList),
     flatten(EncodedList, Binary),
     export_binary("programs/test.ch8",Binary).
 
