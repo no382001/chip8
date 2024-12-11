@@ -181,7 +181,7 @@ encode(load_v0_vx(v(X)), Encoded) :-
 % ir
 % ----------------------------------------------------------------
 
-% ir_load(+Dest, +Value, -InstrList)
+% ir_load(-Dest, -Value, +InstrList)
 ir_load(v(X),Value,InstrList) :-
     integer(Value),
     InstrList = [
@@ -196,11 +196,11 @@ ir_load(v(Dest), v(Source), InstrList) :-
     ].
 
 
-% ir_add(+Dest, +Value, -InstrList)
+% ir_add(-Dest, -Value, +InstrList)
 ir_add(v(X), Value, InstrList) :-
     integer(Value),
     InstrList = [
-    add_nn_to_vx(v(X), nn(Value))
+        add_nn_to_vx(v(X), nn(Value))
     ].
 
 ir_add(v(X), v(Y), InstrList) :-
@@ -208,7 +208,6 @@ ir_add(v(X), v(Y), InstrList) :-
         vx_add_vy(v(X), v(Y))
     ].
 
-% ir_sub(+Dest, +Source, -InstrList)
 ir_sub(v(X), v(Y), InstrList) :-
     InstrList = [
         vx_sub_vy(v(X), v(Y))
@@ -224,21 +223,21 @@ ir_sub(v(X), Value, InstrList) :-
 ir_eq(v(X), nn(Value), InstrList) :-
     gensym('ir_eq_label_', Label),
     InstrList = [
-        set_vx_nn(v(15), nn(Value)), % change this later
+        set_vx_nn(v(15), nn(Value)),
         skip_if_vx_eq_vy(v(X), v(15)),
-        set_vx_nn(v(15), nn(0)),
         goto(label(Label)),
         set_vx_nn(v(15), nn(1)),
-        declare(label(Label))
+        label(Label)
     ].
 
 ir_eq(v(X), v(Y), InstrList) :-
+    gensym('ir_eq_label_', Label),
     InstrList = [
-        set_vx_nn(v(15), nn(0)), % change this later
         skip_if_vx_eq_vy(v(X), v(Y)),
-        set_vx_nn(v(15), nn(1))
+        goto(label(Label)),
+        set_vx_nn(v(15), nn(1)),
+        label(Label)
     ].
-
 
 :- dynamic ir_v_register/2.
 
@@ -287,47 +286,66 @@ ir_translate_expr(binop(==, Lhs, Rhs), ResRegLhs, InstrList) :-
     ir_translate_expr(Lhs, ResRegLhs, LhsInstr),
     ir_translate_expr(Rhs, ResRegRhs, RhsInstr),
 
-    ir_eq(v(ResRegLhs), v(ResRegRhs), EqInstr), % im skipping the non var cmp
+    ir_eq(v(ResRegLhs), v(ResRegRhs), EqInstr),
     
     retractall(ir_v_register(_,ResRegRhs)),
     
     InstrList = [LhsInstr, RhsInstr, EqInstr].
 
 
-ir_translate_expr(if_then_else(Condition, Then, Else), ResRegLhs, InstrList) :-
-    ir_translate_expr(Condition, ResRegCond, CondInstr),
+ir_translate_expr(if_then_else(Condition, Then, []), ResRegLhs, InstrList) :-
+    Condition = binop(==, _, _),
+    ir_translate_expr(Condition, _, CondInstr), % the result is in VF
 
     ir_translate_expr(Then, ResRegLhs, ThenInstr),
-    ir_translate_expr(Else, ResRegRhs, ElseInstr),
     gensym('if_then_else_label1_', Label1),
     
-    (Else = []
-        ->  InstrList = [
+    find_free_register(Label1, Register), % name it anything
+    InstrList = [
             CondInstr,
-            skip_if_vx_eq_vy(v(ResRegCond), v(15)),
+            set_vx_nn(v(Register),nn(1)),
+            skip_if_vx_eq_vy(v(Register), v(15)),
             goto(label(Label1)),
             ThenInstr,
             label(Label1)
-        ]
-        ;   retractall(ir_v_register(_,ResRegRhs)),
+        ],
+    retractall(ir_v_register(_,Register)).
+
+ir_translate_expr(if_then_else(Condition, Then, Else), ResRegLhs, InstrList) :-
+    Condition = binop(==, _, _),
+    ir_translate_expr(Condition, _, CondInstr),
+
+    ir_translate_expr(Then, ResRegLhs, ThenInstr),
+    ir_translate_expr(Else, ResRegRhs, ElseInstr),
+    gensym('if_then_else_label1_', Label1), % this is not a reliable way
     
-            gensym('if_then_else_label2_', Label2),
-            CondCheckInstr = [
-                skip_if_vx_eq_vy(v(ResRegCond), v(15)),
-                goto(label(Label1)),
-                ThenInstr,
-                goto(label(Label2)),
-                label(Label1),
-                ElseInstr,
-                label(Label2)
-            ],
-            %retractall(ir_v_register(_,ResRegCond)), % uhhm?
-            InstrList = [CondInstr, CondCheckInstr]
-    ).
+    %retractall(ir_v_register(_,ResRegRhs)),
+    
+    gensym('if_then_else_label2_', Label2),
+    find_free_register(Label1, Register), % name it anything
+    InstrList = [
+        CondInstr,
+        set_vx_nn(v(Register),nn(1)),
+        skip_if_vx_eq_vy(v(Register), v(15)),
+        goto(label(Label1)),
+        ThenInstr,
+        goto(label(Label2)),
+        label(Label1),
+        ElseInstr,
+        label(Label2),
+        set_vx_nn(v(15), nn(0)) % dont forget to clean up
+    ],
+    retractall(ir_v_register(_,Register)).
+    %retractall(ir_v_register(_,ResRegCond)), % uhhm?
+
 
 ir_translate_expr(declare(label(Name)), _, [label(Name)]).
 ir_translate_expr(goto(label(Name)), _, [goto(label(Name))]).
 ir_translate_expr([], _, []) :- !.
+
+% ----------------------------------------------------------------
+% labels
+% ----------------------------------------------------------------
 
 collect_labels(Instr0, Labels, InstrRes) :-
     findall((Name, AdjustedIndex), (
@@ -364,27 +382,9 @@ resolve_goto_instruction(goto(index(LineNum)), jump_to_address(nnn(ResolvedAddr)
     ResolvedAddr is 0x200 + LineNum * 2 , !.
 resolve_goto_instruction(Instr, Instr).
 
-ir2(ResolvedInstr) :-  % this is not a valid program btw
-    retractall(ir_v_register(_,_)),
-    Ins = [
-        declare(label('main')),
-        declare(var(first)),
-        binop(+,var(first),
-            binop(+,num(2),num(2))),
-
-        declare(var(second)),
-        binop(+,var(second),
-            binop(+,num(1),num(1))),
-
-        binop(+,var(first),var(second)),
-        goto(label('main'))
-    ], !,
-    maplist(ir_translate_expr, Ins, _ , Rs),
-    flatten(Rs, R0),
-    collect_labels(R0, LabelMap, R1), % this fuck is misaligned
-    resolve_gotos(R1, LabelMap, ResolvedInstr),
-
-    print_formatted_instructions(ResolvedInstr).
+% ----------------------------------------------------------------
+% currently testing
+% ----------------------------------------------------------------
 
 ir3(ResolvedInstr) :- 
     retractall(ir_v_register(_,_)),
@@ -393,7 +393,7 @@ ir3(ResolvedInstr) :-
         declare(var(y)),
         declare(label('main')),
         assign(var(x),binop(+,var(x), num(1))),
-        if_then_else( % something wrong with the implementation
+        if_then_else(
             binop(==, var(x), num(5)),
             assign(var(y),binop(+, var(y), num(1))),
             []),
@@ -406,22 +406,32 @@ ir3(ResolvedInstr) :-
     resolve_jump_addresses(R2,ResolvedInstr),
     print_formatted_instructions(ResolvedInstr).
 
-ir_translate_stmt(declaration(X, num(Value)), InstrList) :-
-    % variable does not exists and there is a free register
-    \+ ir_v_register(X, _), find_free_register(FreeReg),
-    assertz(ir_v_register(X,FreeReg)),
-    ir_load(v(FreeReg),Value,InstrList). % load the initial value
-
-ir_translate_stmt(assign(X, num(Value)), InstrList) :-
-    ir_v_register(X, Register), % variable is declared beforehand
-    ir_load(v(Register),Value,InstrList). % load the new value
+ir4(ResolvedInstr) :- 
+    retractall(ir_v_register(_,_)),
+    Ins = [
+        declare(var(x)),
+        declare(var(y)),
+        declare(label('main')),
+        assign(var(x),binop(+,var(x), num(1))),
+        if_then_else(
+            binop(==, var(x), num(5)),
+            assign(var(y),binop(+, var(y), num(1))),
+            assign(var(y),num(12))),
+        goto(label('main'))
+    ], !,
+    maplist(ir_translate_expr, Ins, _ , Rs),
+    flatten(Rs, R0),
+    collect_labels(R0, LabelMap, R1),
+    resolve_gotos(R1, LabelMap, R2),
+    resolve_jump_addresses(R2,ResolvedInstr),
+    print_formatted_instructions(ResolvedInstr).
 
 % ----------------------------------------------------------------
 % main
 % ----------------------------------------------------------------
 
 generate_binary :-
-    ir3(Program0),
+    ir4(Program0), !,
     maplist(encode, Program0, EncodedList),
     flatten(EncodedList, Binary),
     export_binary("programs/test.ch8",Binary).

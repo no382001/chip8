@@ -9,3 +9,7 @@
 
 - prolog terms into ch8 binary
 - cut more
+
+
+
+: only the temporary operations occupy registers and free them
