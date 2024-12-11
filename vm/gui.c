@@ -302,38 +302,57 @@ static void draw_string(uint32_t *buffer, int start_x, int start_y,
   }
 }
 
-void draw_debug_info(uint32_t *buffer, state_t *s) {
+void draw_debug_info(uint32_t *buffer, state_t *s, prev_state_t *prev_state) {
   int display_offset_x = (WINDOW_W - display_width) / 2;
   int display_offset_y = (WINDOW_H - display_height) / 4;
 
   int info_x = 0;
+  char buf[64];
+  uint32_t default_color = 0xFFFFFFFF; // white
+  uint32_t changed_color = 0xFFFFFF00; // yellow
+  uint32_t current_color;
 
   // PC
-  char buf[64];
+  current_color = (s->pc != prev_state->pc) ? changed_color : default_color;
   snprintf(buf, sizeof(buf), "PC: %03X", s->pc);
   draw_string(buffer, info_x + display_offset_x, display_offset_y - 40, buf,
-              0xFFFFFFFF, 0x00000000);
+              current_color, 0x00000000);
+
   // I
+  current_color = (s->I != prev_state->I) ? changed_color : default_color;
   snprintf(buf, sizeof(buf), "I : %03X", s->I);
   draw_string(buffer, info_x + display_offset_x, display_offset_y - 20, buf,
-              0xFFFFFFFF, 0x00000000);
+              current_color, 0x00000000);
 
   int info_y = 10;
+
   // V0-VF
   for (int i = 0; i < 16 / 2; i++) {
+    current_color =
+        (s->V[i] != prev_state->V[i]) ? changed_color : default_color;
     snprintf(buf, sizeof(buf), "V%X: %02X", i, s->V[i]);
     draw_string(buffer, info_x + display_offset_x,
-                info_y + display_offset_y + display_height, buf, 0xFFFFFFFF,
+                info_y + display_offset_y + display_height, buf, current_color,
                 0x00000000);
     info_y += 20;
   }
+
   info_y -= 20 * 8;
   info_x += 140;
+
   for (int i = 0; i < 16 / 2; i++) {
+    current_color =
+        (s->V[i + 8] != prev_state->V[i + 8]) ? changed_color : default_color;
     snprintf(buf, sizeof(buf), "V%X: %02X", i + 8, s->V[i + 8]);
     draw_string(buffer, info_x + display_offset_x,
-                info_y + display_offset_y + display_height, buf, 0xFFFFFFFF,
+                info_y + display_offset_y + display_height, buf, current_color,
                 0x00000000);
     info_y += 20;
+  }
+
+  prev_state->pc = s->pc;
+  prev_state->I = s->I;
+  for (int i = 0; i < 16; i++) {
+    prev_state->V[i] = s->V[i];
   }
 }

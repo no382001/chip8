@@ -149,7 +149,7 @@ int main(int argc, char *argv[]) {
   s.pc = MEMORY_START;
 
   load_rom(rom_file, &s);
-
+  prev_state_t prev_state = {0};
   do {
     mfb_update_state state = mfb_update(window, buffer);
     if (state != STATE_OK)
@@ -157,7 +157,7 @@ int main(int argc, char *argv[]) {
 
     vm_cycle(&s);
     draw_chip8_display(buffer);
-    draw_debug_info(buffer, &s);
+    draw_debug_info(buffer, &s, &prev_state);
 
     if (step) {
 

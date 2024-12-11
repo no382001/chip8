@@ -7,9 +7,6 @@
     - loop unrolling, maybe?
     - register allocation table? this is going to be the most tricky
 
-- prolog terms into ch8 binary
-- cut more
-
-
+- dont use v15
 
 : only the temporary operations occupy registers and free them
