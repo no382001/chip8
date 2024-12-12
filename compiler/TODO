@@ -10,3 +10,5 @@
 - dont use v15
 
 : only the temporary operations occupy registers and free them
+
+- maybe i should just be throwing shit
