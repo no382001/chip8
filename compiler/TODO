@@ -5,10 +5,15 @@
     - dead code
     - strength reduction
     - loop unrolling, maybe?
-    - register allocation table? this is going to be the most tricky
 
-- dont use v15
+compiler:
+    - dont use v15 for conditionals
+    - spill to memory
 
-: only the temporary operations occupy registers and free them
+notes:
+    - only the temporary operations occupy registers and free them, ergo variables are always alive
 
-- maybe i should just be throwing shit
+parser reimplementation:
+    - add a way to parse hex values
+    - allow values bigger than 255? operations can overflow so why restrict it?
+    - do const folding in the parser (its easier that way)
