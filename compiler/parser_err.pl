@@ -31,6 +31,17 @@ variable_helper('') --> [].
 variable_chars([C|Cs]) --> [C], { char_type(C, alnum) }, variable_chars(Cs).
 variable_chars([]) --> [].
 
+
+% ----------------------------
+% 1.2.0. block
+% ----------------------------
+
+% this is the same as statements/4 but without nonempty/3
+% also any `statement level syntax error` is ignored
+block_statements(Bs, Statements) -->
+    ws, statement(Bs, Stm), ws, { append(Bs, [Stm], UpdatedBs) }, block_statements(UpdatedBs, Statements).
+block_statements(Bs, Bs) --> ws.
+
 % ----------------------------
 % 1. statements
 % ----------------------------
@@ -80,26 +91,29 @@ statement(Bs,Stms) -->
         ;   Stms = declassign(Var, Expr)
     }.
 
-
 % ----------------------------
 % 1.2 if-then-else
 % ----------------------------
 
+% not entering a condition will result in a snytax error
 statement(Bs, if_then_else(Cond, ThenStms, ElseStms)) -->
     "if", ws, "(", ws, expression(Bs, Cond), ws, ")", ws, "{", ws,
     block_statements(Bs, ThenStms), ws, "}", ws,
     ( "else", ws, "{", ws, block_statements(Bs, ElseStms), ws, "}" -> []
     ; { ElseStms = [] } ), !.
 
-% this is the same as statements/4 but without nonempty/3
-% also any `statement level syntax error` is ignored
-block_statements(Bs, Statements) -->
-    ws, statement(Bs, Stm), ws, { append(Bs, [Stm], UpdatedBs) }, block_statements(UpdatedBs, Statements).
-block_statements(Bs, Bs) --> ws.
+% ----------------------------
+% 1.3 while
+% ----------------------------
+
+statement(Bs, while(Cond,Body)) -->
+    "while", ws, "(", expression(Bs,Cond), ws, ")", ws, "{", ws,
+    block_statements(Bs, Body), ws, "}", ws, !.
 
 % ----------------------------
 % 2. expression
 % ----------------------------
+
 
 expression(_,Num) --> integer(N),
     {
@@ -227,7 +241,37 @@ tests :-
         [if_then_else(num(1), [declassign(x, num(10))], [declassign(y, num(20))])]),
     run_test("if-then syntax error",
         "if(1){ byte x = ; }",
-        [if_then_else(num(1), [error('syntax error', "byte x = ;")], [])]).
+        [if_then_else(num(1), [error('syntax error', "byte x = ;")], [])]),
+    run_test("if-then non condition",
+        "if(byte v){ byte x = 10; }",
+        [if_then_else(num(1), [declassign(x, num(10))], [])]),
+
+    format("-- section: while --~n"),
+    run_test("while empty body",
+        "while(1){}",
+        [while(num(1), [])]),
+    run_test("while simple body",
+        "while(1){ byte x = 10; }",
+        [while(num(1), [declassign(x, num(10))])]),
+    run_test("while multiple statements",
+        "while(1){ byte x = 10; x = x + 1; }",
+        [while(num(1), [declassign(x, num(10)), assign(x, binop(+, var(x), num(1)))])]),
+    run_test("while nested",
+        "while(1){ while(2){ byte x = 10; } }",
+        [while(num(1), [while(num(2), [declassign(x, num(10))])])]),
+    run_test("while with condition error",
+        "while(x){}",
+        [while(error('use while-in/before declaration', var(x)), [])]),
+    run_test("while body with syntax error",
+        "while(1){ byte x = ; }",
+        [while(num(1), [error('syntax error', "byte x = ;")])]),
+    run_test("while with invalid body",
+        "while(1){ 123abc; }",
+        [while(num(1), [error('syntax error', "123abc;")])]),
+    run_test("while without closing brace",
+        "while(1){ byte x = 10;",
+        [error('syntax error', "while(1){ byte x = 10;")]).
+
 
 %!!.	Repeat last query
 %!nr.	Repeat query numbered <nr>
