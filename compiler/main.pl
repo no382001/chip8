@@ -1,5 +1,6 @@
 
 :- use_module(ir).
+:- use_module(encode).
 
 % ----------------------------------------------------------------
 % currently testing
@@ -67,15 +68,66 @@ ir5(ResolvedInstr) :-
     print_formatted_instructions(R2),
     resolve_jump_addresses(R2,ResolvedInstr),
     print_formatted_instructions(ResolvedInstr).
+
+
+test_ir_complex(ResolvedInstr) :-
+    retractall(ir_v_register(_, _)),  % Clear register tracking
+    Ins = [
+        % Declare variables
+        declare(var(x)),
+        declare(var(y)),
+        declare(var(z)),
+        declare(var(a)),
+        declare(var(b)),
+        declare(var(c)),
+        declare(label('main')),        % Loop start
+
+        % Increment x and y
+        assign(var(x), binop(+, var(x), num(1))), % x = x + 1
+        assign(var(y), binop(+, var(y), num(2))), % y = y + 2
+
+        % Compute z = x + y
+        assign(var(z), binop(+, var(x), var(y))),
+
+        % Perform conditional operations
+        if_then_else(
+            binop(==, var(z), num(15)),           % if z == 15
+            [assign(var(a), num(5)),              % a = 5
+                assign(var(b), binop(+, var(a), num(3)))], % b = a + 3
+            [assign(var(c), binop(-, var(z), num(7)))]   % else c = z - 7
+        ),
+
+        % Draw sprite if a certain condition is met
+        if_then_else(
+            binop(>, var(c), num(0)),             % if c > 0
+            [draw_sprite(var(x), var(c), num(4), label('sprite'))], % Draw sprite
+            [draw_sprite(var(x), var(y), num(4), label('sprite'))]  % Else draw at x, y
+        ),
+
+        % Loop back to the main label
+        goto(label('main')),
+
+        % Define sprite
+        sprite('sprite', [[1, 1, 1, 1], [1, 0, 0, 1], [1, 0, 0, 1], [1, 1, 1, 1]])
+    ],
+    !,
+    maplist(ir_translate_expr, Ins, _, Rs), !,
+    flatten(Rs, R0),
+    collect_labels(R0, LabelMap, R1),
+    resolve_gotos(R1, LabelMap, R2),
+    resolve_jump_addresses(R2, ResolvedInstr),
+    print_formatted_instructions(ResolvedInstr).
+
 % ----------------------------------------------------------------
 % main
 % ----------------------------------------------------------------
 
 genbin :-
-    ir5(Program0), !,
+    test_ir_complex(Program0), !,
     maplist(encode, Program0, EncodedList),
     flatten(EncodedList, Binary),
-    export_binary("programs/test.ch8",Binary).
+    export_binary("programs/test.ch8",Binary),
+    shell('../vm/a.out -r programs/test.ch8').
 
 write_padding(_, 0).
 write_padding(Stream, N) :-
